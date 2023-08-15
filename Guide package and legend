@@ -1,0 +1,30 @@
+#include "CAGeomodel.h"
+#include "OGFrameWork.h"
+#include "OGGme3DLayerGuid.h"
+//
+#include "cpl_conv.h"
+#include "gdal_priv.h"
+#include "s3d_KerAttMdl.h"
+#include "FileTools.h"
+#include "DictDataMng.h"
+#include "s3d_statistic_algo.h"
+#include "FieldBatchSelectDialog.h"
+#include "S3dmBase2dGroup.h"
+#include "S3dmBase3dGroup.h"
+#include "S3dBaseLayerManager.h"
+#include "FieldStructDef.h"
+#include "S3dAppModelDataParse.h"
+#include "S3dm3dRenderRegister.h"
+#include "S3dAppStdStratSelectDlg.h"
+#include <vector>
+#include "S3dAppRender3D.h"
+//
+#include <iomanip>
+
+#define  mx  1
+
+//Evaluate block legend names
+const std::string LEGEND_NAME_SUITABLE = "very suitable";
+const std::string LEGEND_COLOR_RELATIVESUITABLE = "suitable";
+const std::string LEGEND_COLOR_GENERALSUITABLE = "moderately suitable";
+const std::string LEGEND_COLOR_LESSSUITABLE = "not suitable";
