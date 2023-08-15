@@ -1,0 +1,213 @@
+#pragma region 
+void CAGeomodel::X_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		gmeModel* model = getCurrentModel();
+		if (model == nullptr)
+		{
+			string value = str.toLocal8Bit();
+			cellSize.x = atof(value.c_str());
+			nX = ceil(xL / cellSize.x);
+			ui.lineEdit_nX->setText(QString::fromLocal8Bit(std::to_string(nX).c_str()));
+			ui.lineEdit_nX->setCursorPosition(0);
+		}
+		else {
+			gme_rect_3d box;
+			model->GetBox(box);
+
+			std::string strXSize = (std::string)str.toLocal8Bit();
+			double dBoxXL = box.max_x - box.min_x;
+			double dXSize = atof(strXSize.c_str());
+			int iXNum = ceil(dBoxXL / dXSize);
+			ui.lineEdit_nX->setText(QString::number(iXNum));
+		}
+	}
+	else
+	{
+		ui.lineEdit_nX->setText("");
+	}
+}
+
+void CAGeomodel::Y_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		gmeModel* model = getCurrentModel();
+		if (model == nullptr)
+		{
+			string value = str.toLocal8Bit();
+			
+			cellSize.y = atof(value.c_str());
+			nY = ceil(yL / cellSize.y);
+			ui.lineEdit_nY->setText(QString::fromLocal8Bit(std::to_string(nY).c_str()));
+			ui.lineEdit_nY->setCursorPosition(0);
+		}
+		//}
+		else {
+			gme_rect_3d box;
+			model->GetBox(box);
+
+			std::string strYSize = (std::string)str.toLocal8Bit();
+			double dBoxYL = box.max_y - box.min_y;
+			double dYSize = atof(strYSize.c_str());
+			int iYNum = ceil(dBoxYL / dYSize);
+			ui.lineEdit_nY->setText(QString::number(iYNum));
+		}
+	}
+	else
+	{
+		ui.lineEdit_nY->setText("");
+	}
+}
+
+void CAGeomodel::Z_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		gmeModel* model = getCurrentModel();
+		if (model == nullptr)
+		{
+			string value = str.toLocal8Bit();
+			
+			cellSize.z = atof(value.c_str());
+			nZ = ceil(zL / cellSize.z);
+			ui.lineEdit_nZ->setText(QString::fromLocal8Bit(std::to_string(nZ).c_str()));
+			ui.lineEdit_nZ->setCursorPosition(0);
+			
+		}
+		else
+		{
+			gme_rect_3d box;
+			model->GetBox(box);
+
+			std::string strZSize = (std::string)str.toLocal8Bit();
+			double dBoxZL = box.max_z - box.min_z;
+			double dZSize = atof(strZSize.c_str());
+			int iZNum = ceil(dBoxZL / dZSize);
+			ui.lineEdit_nZ->setText(QString::number(iZNum));
+		}
+	}
+	else
+	{
+		ui.lineEdit_nZ->setText("");
+	}
+}
+
+void CAGeomodel::nX_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		gmeModel* model = getCurrentModel();
+		if (model == nullptr)
+		{
+			string value = str.toLocal8Bit();
+			
+			nX = atof(value.c_str());
+			cellSize.x = xL / (nX);
+			cellSize.x += 0.0001;
+			ui.lineEdit_X->setText(QString::fromLocal8Bit(DoubleToString(cellSize.x).c_str()));
+			ui.lineEdit_X->setCursorPosition(0);
+		}
+		
+		else {
+			gme_rect_3d box;
+			model->GetBox(box);
+
+			std::string iXNum = (std::string)str.toLocal8Bit();
+			double dBoxL = box.max_x - box.min_x;
+			int Xnum = atof(iXNum.c_str());
+			double dXSize = ceil(dBoxL / Xnum);
+			ui.lineEdit_X->setText(QString::number(dXSize));
+		}
+	}
+	else
+	{
+		ui.lineEdit_X->setText("");
+	}
+}
+
+void CAGeomodel::nY_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		gmeModel* model = getCurrentModel();
+		if (model == nullptr)
+		{
+			string value = str.toLocal8Bit();
+			
+			nY = atof(value.c_str());
+			cellSize.y = yL / (nY);
+			cellSize.y += 0.0001;
+			ui.lineEdit_Y->setText(QString::fromLocal8Bit(DoubleToString(cellSize.y).c_str()));
+			ui.lineEdit_Y->setCursorPosition(0);
+			
+		}
+		else {
+			gme_rect_3d box;
+			model->GetBox(box);
+
+			std::string iYNum = (std::string)str.toLocal8Bit();
+			double dBoxL = box.max_y - box.min_y;
+			int Ynum = atof(iYNum.c_str());
+			double dYSize = ceil(dBoxL / Ynum);
+			ui.lineEdit_Y->setText(QString::number(dYSize));
+		}
+	}
+	else
+	{
+		ui.lineEdit_Y->setText("");
+	}
+}
+
+void CAGeomodel::nZ_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		gmeModel* model = getCurrentModel();
+		if (model == nullptr)
+		{
+			string value = str.toLocal8Bit();
+			
+			nZ = atof(value.c_str());
+			cellSize.z = zL / (nZ);
+			cellSize.z += 0.0001;
+			ui.lineEdit_Z->setText(QString::fromLocal8Bit(DoubleToString(cellSize.z).c_str()));
+			ui.lineEdit_Z->setCursorPosition(0);
+			
+		}
+		else {
+			gme_rect_3d box;
+			model->GetBox(box);
+
+			std::string iZNum = (std::string)str.toLocal8Bit();
+			double dBoxL = box.max_z - box.min_z;
+			int Znum = atof(iZNum.c_str());
+			double dZSize = ceil(dBoxL / Znum);
+			ui.lineEdit_Z->setText(QString::number(dZSize));
+		}
+	}
+	else
+	{
+		ui.lineEdit_Z->setText("");
+	}
+}
+
+void CAGeomodel::weight_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		string value = str.toLocal8Bit();
+		disWeight =StringToDouble(value);
+	}
+}
+
+void CAGeomodel::radiu_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		string value = str.toLocal8Bit();
+		IDWradiu = StringToDouble(value);
+	}
+}
+
