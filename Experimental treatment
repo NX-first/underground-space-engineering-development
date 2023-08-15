@@ -1,0 +1,401 @@
+//Obtain the experimental table name and corresponding attribute parameter fields
+void CAGeomodel::GetTestTabAddFldName(std::vector<TblFlds>& tblFldss)
+{
+	tblFldss.clear();
+	std::vector<sysdict_MdlTbl> vecTestTabs;//Internal list information
+
+	//Since the current system supports multiple databases, you need to set the database link before fetching data
+
+	DictDataMng::getSingletonPtr()->setCurDbConn((__int64)m_Con);
+
+	//Get experiment table
+	DictDataMng::getSingletonPtr()->getConfigedTablesByType(TEST_TBL, vecTestTabs);
+
+	for (size_t i = 0; i < vecTestTabs.size(); i++)
+	{
+		std::vector<sysdict_MdlTblFld> vecFields;       //Test attribute set
+		//Gets the fields of the current table
+		DictDataMng::getSingletonPtr()->getConfigedFieldsByTable(vecTestTabs[i].innerTblName, EXPERI_ATTR, vecFields);
+		if (vecFields.size() > 0)      
+		{
+			TblFlds tblFlds;
+			tblFlds.tblName = vecTestTabs[i].innerTblName;  //Internal table
+			tblFlds.tblNameC = vecTestTabs[i].innerTblNameC;//Chinese
+			for (int j = 0; j < vecFields.size(); j++)
+			{
+				std::pair<std::string, std::string> fldName;
+				fldName.first = vecFields[j].innerFldName;
+				fldName.second = vecFields[j].innerFldNameC;
+				tblFlds.fldNames.push_back(fldName);
+			}
+			tblFldss.push_back(tblFlds);
+		}
+	}
+	for (int i = 0; i < tblFldss.size(); i++)
+	{
+		TblFlds tblFlds = tblFldss[i];
+		ui.comboBox_TestData->addItem(QString::fromLocal8Bit(tblFlds.tblNameC.c_str()), QString::fromLocal8Bit(tblFlds.tblName.c_str()));
+	    
+	}
+	if (tblFldss.size() > 0)
+	{
+		ui.comboBox_MdlData->setCurrentIndex(0);
+	}
+}
+
+//获取钻孔样本
+bool CAGeomodel::GetSampleData(TblFlds flds, std::vector<gme_vector2d>& vecpolygon,
+	std::vector<std::pair<InnerName, std::vector<attDataStru>>>& samples,
+	std::vector<int>& vecSuccessNo)
+{
+	vector<vector<gme_vector2d>> tmp{ vecpolygon };
+	AttrDBMng::CONDITION_INFO cond(AttrDBMng::SQL_CONDITION::G2D_POLYGON, EQUAL, tmp);
+	std::vector<AttrDBMng::CONDITION_INFO> conds;
+	conds.push_back(cond);
+
+	std::vector<AttrDBMng::TestColumnsData > testDatas;
+	std::vector<std::string> inner_columns;
+	for (int i = 0; i < flds.fldNames.size(); i++)
+	{
+		inner_columns.emplace_back(flds.fldNames[i].first);//Field name
+	}
+	inner_columns.emplace_back(UNION_MACRO_START_DEPTH);
+	inner_columns.emplace_back(UNION_MACRO_END_DEPTH);
+	inner_columns.emplace_back(UNION_MACRO_TCDH);
+
+	int fieldNum = inner_columns.size();
+	AttrDBMng::getSingletonPtr()->getTestColumnsInfo(testDatas, flds.tblName, inner_columns, &conds);//Experiment table attribute query
+
+	if (testDatas.empty())
+	{
+		return false;
+	}
+
+	//When the formation code is not obtained, the formation code is calculated by depth
+	std::string stratCode = "";
+	int stratCodeIndex = fieldNum - 1;
+	int endDepthIndex = fieldNum - 2;
+	int startDepthIndex = fieldNum - 3;
+	testDatas[0].m_column_info_list[stratCodeIndex].getData(stratCode);
+
+	double midDepth = 0;
+	double startDepth = 0;
+	double endDepth = 0;
+
+	if (stratCode == "")
+	{
+		
+		std::vector<HoleInfo> result_list;
+		std::vector<AttrDBMng::CONDITION_INFO> conds;
+		AttrDBMng::CONDITION_INFO cond = { AttrDBMng::STDSTRAT_ID, EQUAL, m_StdStratId };
+		conds.push_back(cond);
+		AttrDBMng::getSingletonPtr()->getHoleAndHoleLayer(result_list, &conds);
+		std::map<int, HoleInfo> mapHoleLists;
+		for (int i = 0; i < result_list.size(); i++)
+		{
+			mapHoleLists[result_list[i].PntID] = result_list[i];
+		}
+
+		for (int i = 0; i < result_list.size(); i++)
+		{
+			testDatas[i].m_column_info_list[stratCodeIndex].getData(stratCode);
+			//If the soil layer code is empty, retrieve the soil layer code from the database
+			if (stratCode == "")
+			{
+				int type = testDatas[i].m_column_info_list[startDepthIndex].getDataType();
+				if (type == AutoDataType::Double)
+				{
+					testDatas[i].m_column_info_list[startDepthIndex].getData(startDepth);
+				}
+				else if (type == AutoDataType::Integer)
+				{
+					long tmp_value;
+					testDatas[i].m_column_info_list[startDepthIndex].getData(tmp_value);
+					startDepth = tmp_value;
+				}
+
+				type = testDatas[i].m_column_info_list[endDepthIndex].getDataType();
+				if (type == AutoDataType::Double)
+				{
+					testDatas[i].m_column_info_list[endDepthIndex].getData(endDepth);
+				}
+				else if (type == AutoDataType::Integer)
+				{
+					long tmp_value;
+					testDatas[i].m_column_info_list[endDepthIndex].getData(tmp_value);
+					endDepth = tmp_value;
+				}
+
+				midDepth = (startDepth + endDepth)*0.5;
+				int pntId = testDatas[i].m_n_pnt_id;
+				if (mapHoleLists.find(pntId) != mapHoleLists.end())
+				{
+					HoleInfo& holeInfo = mapHoleLists[pntId];
+					stratCode = getStratCodeByDepth(holeInfo, midDepth);
+					testDatas[i].m_column_info_list[stratCodeIndex] = stratCode;
+				}
+			}
+		}
+	}
+
+	//Store the serial number of the successfully fetched sample
+	vecSuccessNo.clear();
+
+	samples.clear();
+
+	//Put data into a structure
+	std::map<std::string, std::vector<attDataStru>> mapSample; //first is the field name //attDataStru sample data structure
+	for (int i = 0; i < testDatas.size(); i++)
+	{
+		attDataStru attrData;
+		attrData.d4dot.x = testDatas[i].m_d_x;
+		attrData.d4dot.y = testDatas[i].m_d_y;
+
+		int type = testDatas[i].m_column_info_list[startDepthIndex].getDataType();
+		if (type == AutoDataType::Double)
+		{
+			testDatas[i].m_column_info_list[startDepthIndex].getData(startDepth);
+		}
+		else if (type == AutoDataType::Integer)
+		{
+			long tmp_value;
+			testDatas[i].m_column_info_list[startDepthIndex].getData(tmp_value);
+			startDepth = tmp_value;
+		}
+
+		type = testDatas[i].m_column_info_list[endDepthIndex].getDataType();
+		if (type == AutoDataType::Double)
+		{
+			testDatas[i].m_column_info_list[endDepthIndex].getData(endDepth);
+		}
+		else if (type == AutoDataType::Integer)
+		{
+			long tmp_value;
+			testDatas[i].m_column_info_list[endDepthIndex].getData(tmp_value);
+			endDepth = tmp_value;
+		}
+
+		midDepth = (startDepth + endDepth)*0.5;
+		attrData.d4dot.z = testDatas[i].m_d_z - midDepth;
+
+		for (int j = 0; j < inner_columns.size() - 3; j++)
+		{
+			std::string fldAttr = inner_columns[j];
+			AutoDataType::DataType dataType = testDatas[i].m_column_info_list[j].getDataType();
+			if (dataType == AutoDataType::DataType::Double)
+			{
+				double val = 0;
+				testDatas[i].m_column_info_list[j].getData(val);
+				attrData.d4dot.w = val;
+				testDatas[i].m_column_info_list[stratCodeIndex].getData(attrData.strlayer);
+				mapSample[fldAttr].push_back(attrData);
+
+				//Record only the collection of field sequence numbers that successfully fetched data once
+				if (i == 0)
+				{
+					vecSuccessNo.emplace_back(j);
+				}
+			}
+			else if (dataType == AutoDataType::DataType::Integer)
+			{
+				int val = 0;
+				testDatas[i].m_column_info_list[j].getData(val);
+				attrData.d4dot.w = val;
+				testDatas[i].m_column_info_list[stratCodeIndex].getData(attrData.strlayer);
+				mapSample[fldAttr].push_back(attrData);
+
+				//Record only the collection of field sequence numbers that successfully fetched data once
+				if (i == 0)
+				{
+					vecSuccessNo.emplace_back(j);
+				}
+			}
+		}
+	}
+	for (auto iter = mapSample.begin(); iter != mapSample.end(); iter++)
+	{
+		std::string innerTbl = flds.tblName;
+		std::string innerFld = iter->first;
+		samples.push_back({ {innerTbl,innerFld},iter->second });
+	}
+	return true;
+}
+
+//The strata are numbered according to the depth
+std::string CAGeomodel::getStratCodeByDepth(const HoleInfo & hole, const double & depth)
+{
+	const std::vector<s3d_BoreHoleLayer>& holeLayers = hole.m_LayerList;//Borehole stratification list
+	for (int i = 0; i < holeLayers.size(); i++)
+	{
+		double topDepth = hole.m_dHoleTop - holeLayers.at(i).m_dTop;
+		double btmDepth = hole.m_dHoleTop - holeLayers.at(i).m_dBottom;
+		if (depth >= topDepth && depth <= btmDepth)
+		{
+			return holeLayers.at(i).m_stratCode;
+		}
+	}
+
+	return "";
+}
+
+//Gets the default table name
+std::string CAGeomodel::getDefaultName(InnerName & tblFld)
+{
+	for (int i = 0; i < m_SelectFlds.size(); i++)
+	{
+		if (m_SelectFlds[i].tblName == tblFld.TblName)
+		{
+			for (int j = 0; j < m_SelectFlds[i].fldNames.size(); j++)
+			{
+				if (m_SelectFlds[i].fldNames[j].first == tblFld.FldName)
+				{
+					return m_SelectFlds[i].fldNames[j].second;
+				}
+			}
+		}
+	}
+	return "";
+}
+
+//Selection experiment table
+void CAGeomodel::SelectTestData()
+{
+	//Experimental data changes --&gt; Change the property parameter list
+	ui.comboBox_FieldPara->clear();
+	std::string tblName = ui.comboBox_TestData->currentData().toString().toLocal8Bit();
+	for (int i = 0; i < m_AllTblFlds.size(); i++)
+	{
+		if (m_AllTblFlds[i].tblName == tblName)
+		{
+			std::vector<std::pair<std::string, std::string>> flds = m_AllTblFlds[i].fldNames;
+			for (int j = 0; j < flds.size(); j++)
+			{
+				ui.comboBox_FieldPara->addItem(QString::fromLocal8Bit(flds[j].second.c_str()), QString::fromLocal8Bit(flds[j].first.c_str()));
+			}
+			break;
+		}
+	}
+	if (ui.comboBox_FieldPara->count() > 0)
+	{
+		ui.comboBox_FieldPara->setCurrentIndex(0);
+	}
+}
+
+
+//Backup copy
+gmeGridModel* CAGeomodel::buildOctFieldModel(std::pair<InnerName, std::vector<attDataStru>>& samples, gme_rect_3d& box, std::string modelName)
+{
+	double dxSize = ui.lineEdit_X->text().toDouble();  //Grid big and small
+	double dySize = ui.lineEdit_Y->text().toDouble();
+	double dzSize = ui.lineEdit_Z->text().toDouble();
+
+	OgAppResLoadingIterator::getSingleton().editStatusCmd("Rasterized");
+
+	//Attribute data analysis
+	attAnalyCls analyCls;
+	int isLoadSampe = analyCls.loadSampleDots(samples.second);
+	if (isLoadSampe == 0)
+	{
+		return nullptr;
+	}
+
+	map<std::string, vector<gme_vector4d>> mapSampledots;
+	analyCls.GetAllLayerDatas(mapSampledots); 
+
+	//Attribute data interpolation/attribute modeling parameters
+	attMdlParam attParam;
+	attParam.dx = dxSize;
+	attParam.dy = dySize;
+	attParam.dz = dzSize;
+	attParam.attName = samples.first.FldName;
+
+
+	map<std::string, vector<gmeEntity*>> mapEntyModel;	//entity in the structure model
+	GetMapEntity(getCurrentModel(), mapEntyModel);
+
+	attCreateCls createCls;
+	createCls.setMdlParam(attParam);
+	createCls.loadSampleDatas(mapSampledots);
+	createCls.loadGeoEntity(mapEntyModel);
+	createCls.setMdlBox(box);
+	createCls.Create3dGridMdl();
+	createCls.Cal3dGridAttVal();
+	//string vtkpath = "G:/vtk/test01.vtk";
+	//string vtkpath = "G:/VTK_ColorTable/test01.vtk";
+	//Select storage location
+	string vtkpath = SelectoutputPath(attParam.attName);
+
+	createCls.GeoAttMdl2VTK(vtkpath);//Output the property model to a csv/vtk file
+	QMessageBox::information(this, QStringLiteral("Tips"), QStringLiteral("The file is successfully saved to the local PC"));
+
+	gme_rect_3d mdl_box;
+	long x_num = 0, y_num = 0, z_num = 0;
+	gme_vector3d  xyz_gap, min_pnt, max_pnt;
+	vector<double>* pAttValues = NULL;
+	createCls.OutPutAttMdlDatas(&mdl_box, &x_num, &y_num, &z_num, &xyz_gap, &min_pnt, &max_pnt, &pAttValues);
+	OgAppResLoadingIterator::getSingleton().editStatusProg(60);
+
+	  //Attribute value after preprocessing interpolation
+	if (samples.first.TblName == TBL_LOADTEST_TBL && samples.first.FldName == TBL_LOADTEST_FLD_YSKYZ)
+	{ // The "Rock pressure channel (MPa)" attribute of the load test results table needs to be processed
+		std::vector<std::string> strat_code_list;
+		createCls.getAttrValsCode(strat_code_list);//Returns the stratigraphic code for each cell
+		std::map<std::string, gm_strat_type> strat_reference;
+		for (auto strat_it = m_strat_info_list.begin(); strat_it != m_strat_info_list.end(); ++strat_it)
+		{
+			strat_reference[strat_it->m_stratCode] = gm_strat_type(strat_it->m_stratType);
+		}
+		preProcess(*pAttValues, strat_code_list, strat_reference);
+	}
+
+	//Build attribute model
+	gme_vector3d localOrigin(mdl_box.min_x, mdl_box.min_y, mdl_box.min_z);
+	gmeLocalAxis localAxis(localOrigin, gme_radian_d(0), gme_radian_d(0)); //Local coordinate system
+
+	gme_vector3d minPt = localAxis.GlobalToLocal(min_pnt);
+	gme_vector3d maxPt = localAxis.GlobalToLocal(max_pnt); //Bounding box - Global to local
+
+	gme_vector3d cellSize(xyz_gap.x, xyz_gap.y, xyz_gap.z);
+
+	gmeField field1(samples.first.FldName, gmeFieldValue::gmeType::Type_Real64);
+	field1.SetInvalidValue(to_string(invalid));
+	gmeFields schema;
+	schema.Append(field1);
+
+	gmeGridModel* pOctFieldGeom = new gmeGridModel(modelName, localAxis, maxPt, cellSize, schema);
+
+	const gme_vector3i&  dim = pOctFieldGeom->GetDimension();
+	long xSpan = dim.x;
+	long ySpan = dim.y;
+	long zSpan = dim.z;
+
+	if (pAttValues->size() == xSpan * ySpan * zSpan)
+	{
+		pOctFieldGeom->SetCellsValue(field1.GetName(), {0,0,0}, xSpan, ySpan, zSpan, &(*pAttValues)[0]);
+
+		OgAppResLoadingIterator::getSingleton().editStatusProg(80);
+
+		vector<double> breakVals;
+		AttBreaksSet(*pAttValues, breakVals);//Calculate break point 815
+		setOctFieldColor(pOctFieldGeom, breakVals);//paint
+
+		gmeGridModel* pAttrModel = buildOctFieldModel(pOctFieldGeom);
+
+		gmeGridModel::FieldColorMap fieldColor;
+		fieldColor = pOctFieldGeom->GetColorMap();
+
+		vector<gme_color4> colors;	//Legend color
+		//i=0 is the invalid value color, i=size-1 is the meaningless supplementary color
+		for (size_t i = 1; i < fieldColor.vFieldColors.size() - 1; i++)
+		{
+			colors.push_back(fieldColor.vFieldColors[i].second);
+		}
+
+		//
+		setOctFieldLegend(pAttrModel, breakVals, colors);//Set Legend 815
+
+		return pAttrModel;
+	}
+	return nullptr;
+}
+
