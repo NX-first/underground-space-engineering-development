@@ -1,0 +1,1127 @@
+//preconditioning
+void CAGeomodel::preProcess(std::vector<double> &attr_list, const std::vector<std::string> &strat_code_list, const  std::map<std::string, gm_strat_type> &strat_reference)
+{
+	if (attr_list.size() != strat_code_list.size() || attr_list.empty())
+	{
+		return;
+	}
+	//// Get a range of valid values, and then determine the overall worst value within that range
+	//double min_value, max_value;
+	//min_value = max_value = attr_list[0];
+	//bool is_valid = false;
+	//for (int i = 0; i < attr_list.size(); ++i)
+	//{
+	//	is_valid = (fabs(attr_list[i] - invalid)>10e-6 && attr_list[i] > invalid);
+	//	if (!is_valid)
+	//	{
+	//		continue;
+	//	}
+	//	min_value > attr_list[i] ? (min_value = attr_list[i]) : 0;
+	//	max_value < attr_list[i] ? (max_value = attr_list[i]) : 0;
+	//	
+	//}
+	for (int i = 0; i < attr_list.size(); ++i)
+	{
+		auto found_key = strat_reference.find(strat_code_list[i]);
+		if (found_key == strat_reference.end())
+		{
+			// Strata with no code found are not processed
+			continue;
+		}
+		switch (found_key->second)
+		{
+		case GM_STRAT_TYPE_NONE: //If the stratigraphic code does not exist, it is also set to invalid value
+		case GM_STRAT_TYPE_STRAT:
+		case GM_STRAT_TYPE_STRAT_Q:
+		case GM_STRAT_TYPE_STRAT_BR:
+		case GM_STRAT_TYPE_STRAT_LENTICLE:
+		{
+			attr_list[i] = 0; //Set it to a very poor value, not an invalid value
+			break;
+		}
+		default:
+		{
+
+		}
+		}
+	}
+}
+
+//Computation break point
+void CAGeomodel::AttBreaksSet(vector<double>& sampless, vector<double>& breakVals)
+{
+	vector<double> samples;
+	for (int i = 0; i < sampless.size(); i++)
+	{
+		if (sampless[i] != invalid)
+		{
+			samples.push_back(sampless[i]);
+		}
+	}
+	//By system function
+	double maxtemp = samples[0];
+	for (int i = 1; i < samples.size(); i++) {
+		if (maxtemp< samples[i]) {
+			maxtemp = samples[i];
+		}
+	}
+
+	
+	int iLevelNum = ui.spinBox_LevelNum->text().toInt();  //Hierarchical color series
+	//int iLevelNum = 5;//815
+	int iMethodIndex = ui.comboBox_ClassMethod->currentIndex(); //Classification method
+
+	bool jenkIs = true;
+	switch (iMethodIndex)
+	{
+	case 0://Natural breakpoint method
+		jenkIs = JenksNaturalBreaks::NaturalClassifyBreaks(samples, iLevelNum + 1, 0, breakVals);
+		for (int i = 0; i < breakVals.size(); i++) {
+			if (i = breakVals.size() - 1) {
+				breakVals[i] = maxtemp;
+			}
+		}
+		/*int placindex=breakVals.size();
+		replace(breakVals.begin(), breakVals.end(), placindex, tempmax);
+		breakVals.end() = tempmax;*/
+		break;
+
+	case 1://Equal interval method
+		jenkIs = gm_statistic_algo::EqualSpacingGetBreaks(samples, iLevelNum + 1, 0, breakVals);
+		break;
+
+	case 2://Quantile method
+		jenkIs = QuantileBreaks::QuantileGetBreaks(samples, iLevelNum + 1, 0, breakVals);
+		break;
+	default:
+		break;
+	}
+}
+
+//Selection of classification method
+void CAGeomodel::ClassifyMethod(vector<attDataStru>& sampless)
+{
+	int iMethodNo = ui.comboBox_ClassMethod->currentIndex();
+	vector<double> samples;
+	for (int i = 0; i < sampless.size(); i++)
+	{
+		samples.push_back(sampless[i].d4dot.w);
+	}
+
+	if (!samples.empty())
+	{
+		ui.spinBox_LevelNum->setMaximum(samples.size());
+
+		double dAttValMax = *max_element(samples.begin(), samples.end());
+		double dAttValMin = *min_element(samples.begin(), samples.end());
+		switch (iMethodNo)
+		{
+		case 0:
+			break;
+		case 1:
+		{
+			//Equal interval
+			int iNum = (dAttValMax - dAttValMin) * 100;
+			if (iNum < 99)
+			{
+				ui.spinBox_LevelNum->setMaximum(iNum);
+				if (iNum < 5 || iNum < ui.spinBox_LevelNum->text().toInt())
+				{
+					ui.spinBox_LevelNum->setValue(iNum);
+				}
+			}
+			break;
+		}
+		case 2:
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+
+void CAGeomodel::GetClassMeth()
+{
+	//Adds an attribute value classification method 
+	ui.comboBox_ClassMethod->addItem(QStringLiteral("Natural breakpoint method"));
+	ui.comboBox_ClassMethod->addItem(QStringLiteral("Equidistance method"));
+	ui.comboBox_ClassMethod->addItem(QStringLiteral("fractile"));
+	ui.comboBox_ClassMethod->setCurrentIndex(2);
+}
+
+//Stratigraphic corresponding number
+void CAGeomodel::getStratIdByCode(map<std::string, vector<gmeEntity*>>& ents, map<string, int>& basLayersVec)
+{
+	AttrDBMng::getSingletonPtr()->setCurDbConn(m_Con);
+	int stdId = m_StdStratId;
+	std::vector<Smart3dMap::hole_stdStratDesc> baseLayers;
+	std::vector<AttrDBMng::CONDITION_INFO> conds;
+	AttrDBMng::CONDITION_INFO cond = { AttrDBMng::STDSTRAT_ID, EQUAL,stdId };
+	conds.push_back(cond);
+	AttrDBMng::getSingletonPtr()->getSysStdStratDesc(baseLayers, &conds);
+	std::map <std::string, hole_stdStratDesc> mapStdLayers;
+	for (int i = 0; i < baseLayers.size(); i++)
+	{
+		mapStdLayers[baseLayers[i].m_stratCode] = baseLayers[i];
+	}
+
+	for (auto iter = ents.begin(); iter != ents.end(); iter++)
+	{
+		std::string code = iter->first;
+		if (mapStdLayers.find(code) != mapStdLayers.end())
+		{
+			basLayersVec[code] = mapStdLayers[code].ID;
+		}
+	}
+}
+
+//Structured data output
+void  CAGeomodel::GeoStruMdl2Vtk()
+{
+	
+	gmeModel* pModel = getCurrentModel();
+	if (pModel == nullptr)
+	{
+		QMessageBox::information(this, QStringLiteral("Tips"), QStringLiteral("Please select a structural model"), MB_OK);
+		return;
+	}
+
+	gme_rect_3d box;
+	pModel->GetBox(box);
+
+
+	map<std::string, vector<gmeEntity*>> m_mapEntyModel;	//entity in the structure model
+	GetMapEntity(getCurrentModel(), m_mapEntyModel);
+	map<string, int> basLayersVec; //Serial number corresponding to the standard stratum
+	getStratIdByCode(m_mapEntyModel, basLayersVec);
+
+
+	std::string strTmpPath = pModel->GetName();
+	if (strTmpPath.empty())
+	{
+		strTmpPath = "Grid model of geological structure";
+	}
+
+	strTmpPath = preProceessName(strTmpPath);
+
+	attMdlParam attParam;
+	attParam.dx = ui.lineEdit_X->text().toDouble();
+	attParam.dy = ui.lineEdit_Y->text().toDouble();
+	attParam.dz = ui.lineEdit_Z->text().toDouble();
+	//attParam.attName = strPath + "/" + strTmpPath + ".vtk";
+	string  strPath = SelectoutputPath(strTmpPath); //Select directory
+	attParam.attName = strPath;
+	OgAppResLoadingIterator::getSingleton().editStatusProg(40);
+	attCreateCls  pcreateCls;   //Attribute data interpolation class
+	pcreateCls.setMdlParam(attParam);
+	pcreateCls.setMdlBox(box);
+	pcreateCls.loadGeoEntity(m_mapEntyModel);
+	pcreateCls.setStdStrat(basLayersVec); //Standard strata corresponding serial number
+	pcreateCls.geoStruMdl2VTK(attParam.attName); 
+	OgAppResLoadingIterator::getSingleton().editStatusProg(80);
+	OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+	std::string strName = "The structure model grid is saved successfully";
+	QMessageBox::information(this, QStringLiteral("Tips"), QString::fromLocal8Bit(strName.c_str()));
+}
+
+
+//Attribute data output
+void CAGeomodel::OctFieldMdl2Vtk()
+{
+	
+	OgAppResLoadingIterator::getSingleton().editStatusProg(0);
+	std::string name = "";
+	
+	m_SelectFlds.clear();
+	TblFlds selectFld;
+	selectFld.tblName = ui.comboBox_TestData->currentData().toString().toLocal8Bit().data();
+	selectFld.tblNameC = ui.comboBox_TestData->currentText().toLocal8Bit().data();
+	std::string  fldName = ui.comboBox_FieldPara->currentData().toString().toLocal8Bit().data();
+	std::string fldNameC = ui.comboBox_FieldPara->currentText().toLocal8Bit().data();
+	if (fldName != "")
+	{
+		selectFld.fldNames.push_back({ fldName,fldNameC });
+		name = ui.lineEdit_MdlName->text().toLocal8Bit().data();
+		m_SelectFlds.push_back(selectFld);
+	}
+	gmeModel* model = getCurrentModel();
+	if (model == nullptr)
+	{
+		QMessageBox::information(this, QStringLiteral("Tips"), QStringLiteral("No structural model data was obtained！"));
+		return;
+	}
+	if (m_SelectFlds.empty())
+	{
+		QMessageBox::information(this, QStringLiteral("Tips"), QStringLiteral("Please select a field！"));
+		return;
+	}
+
+
+	OgAppResLoadingIterator::getSingleton().editStatusCmd("Attribute modeling");
+	double dxSize = ui.lineEdit_X->text().toDouble();  //Grid big and small
+	double dySize = ui.lineEdit_Y->text().toDouble();
+	double dzSize = ui.lineEdit_Z->text().toDouble();
+
+	gme_rect_3d box;
+	model->GetBox(box);
+	std::vector<gme_vector2d> vecpolygon;
+	vecpolygon.push_back({ box.xmin,box.ymin });
+	vecpolygon.push_back({ box.xmax,box.ymin });
+	vecpolygon.push_back({ box.xmax,box.ymax });
+	vecpolygon.push_back({ box.xmin,box.ymax });
+	vecpolygon.push_back({ box.xmin,box.ymin });
+
+	map<std::string, vector<gmeEntity*>> mapEntyModel;			//entity in the structure model
+	GetMapEntity(getCurrentModel(), mapEntyModel);
+
+	std::vector<std::pair<InnerName, std::vector<attDataStru>>> samples;
+	std::vector<int> vecSuccessNo;
+
+	for (int i = 0; i < m_SelectFlds.size(); i++)
+	{
+
+		OgAppResLoadingIterator::getSingleton().editStatusProg(20);
+
+		samples.clear();
+		vecSuccessNo.clear();
+		GetSampleData(m_SelectFlds[i], vecpolygon, samples, vecSuccessNo);
+
+		OgAppResLoadingIterator::getSingleton().editStatusProg(40);
+		for (int j = 0; j < samples.size(); j++)
+		{
+			attAnalyCls analyCls;
+			int isLoadSampe = analyCls.loadSampleDots(samples[j].second);
+			if (isLoadSampe == 0)
+			{
+				continue;
+			}
+
+			map<std::string, vector<gme_vector4d>> mapSampledots;
+			analyCls.GetAllLayerDatas(mapSampledots);
+
+			//Attribute data interpolation
+			attMdlParam attParam;
+			attParam.dx = dxSize;
+			attParam.dy = dySize;
+			attParam.dz = dzSize;
+			attParam.attName = samples[j].first.FldName;
+
+			attCreateCls createCls;
+			createCls.setMdlParam(attParam);
+			createCls.loadSampleDatas(mapSampledots);
+
+			createCls.loadGeoEntity(mapEntyModel);
+			createCls.setMdlBox(box);
+			createCls.Create3dGridMdl();
+			createCls.Cal3dGridAttVal();
+			OgAppResLoadingIterator::getSingleton().editStatusProg(60);
+
+			std::string strTmpFldName = m_SelectFlds[i].fldNames[vecSuccessNo[j]].second;
+			strTmpFldName = preProceessName(strTmpFldName);
+
+			//std::string strFilePath = strPath + "/Attribute model grid_" + strTmpFldName + ".vtk";
+			string  strPath = SelectoutputPath(strTmpFldName);
+			createCls.GeoAttMdl2VTK(strPath);
+			//OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+		}
+	}
+	OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+	std::string strName = "Attribute model grid saved successfully";
+	QMessageBox::information(this, QStringLiteral("提示"), QString::fromLocal8Bit(strName.c_str()));
+}
+
+//Remove illegal character names
+std::string CAGeomodel::preProceessName(std::string name)
+{
+	std::string strFldName = "";
+	//Handling of property field names: remove units, such as (m/s), remove/or \\ symbols
+	std::vector<string> vecSplits = OC::StringUtil::split(name, "(");
+	if (!vecSplits.empty())
+	{
+		strFldName = vecSplits[0];
+	}
+
+	//Avoid file generation failure if the file name contains/or \\
+	_Replace_Str(strFldName, "/", "");
+	_Replace_Str(strFldName, "\\", "");
+	return strFldName;
+}
+
+
+//Select Property Model and Structure Model vtk storage folder
+std::string CAGeomodel::SelectoutputPath(std::string vtkname)
+{
+		QString fileName = QFileDialog::getExistingDirectory(this, QStringLiteral("Select the folder path to store properties model"), "", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+		if (!fileName.isEmpty())
+		{
+			ui.lineEdit_ExportPath->setText(fileName);
+		}
+		string  vtkpath= string(fileName.toLocal8Bit()) + "/" + vtkname + ".vtk";//Solve the Chinese path problem
+		      return vtkpath;
+}
+
+
+//Set legend
+void CAGeomodel::setOctFieldLegend(gmeGridModel * model, vector<double>& breakVals, vector<gme_color4>& colors)
+{
+	if (model == nullptr)
+	{
+		return;
+	}
+
+	std::string strLegendName = model->GetName();
+	std::vector<std::string> vecSplits = OC::StringUtil::split(strLegendName, "_");
+	int iSplitsNum = vecSplits.size();
+	if (iSplitsNum > 1)
+	{
+		strLegendName = vecSplits[iSplitsNum - 1];
+	}
+
+	//Add legend
+	if (breakVals.size() == colors.size())
+	{
+		AttachStripLegend(model, breakVals, colors, strLegendName);
+	}
+	else
+	{
+		AttachBlockLegend(model, breakVals, colors, strLegendName);
+	}
+}
+
+
+//Strip legend
+void CAGeomodel::AttachStripLegend(gmeGridModel *pOctFieldMdl, vector<double> vBreaks, vector<gme_color4> vCols, string strLegendName)
+{
+	if (vBreaks.empty() || vCols.empty() || (vBreaks.size() != vCols.size()))
+	{
+		return;
+	}
+
+	vector<string> stratCode;
+	vector<string> stratName;
+	vector<string> materialName;
+	GME_LEGEND_TYPE legendType = GME_LT_COLORTBL;
+
+	double dPreValue = 0.0;
+	long   lStratClr = 0;
+
+	for (size_t i = 0; i < vBreaks.size(); i++)
+	{
+		dPreValue = vBreaks[i];
+		lStratClr = vCols[i].r + vCols[i].g * 256 + vCols[i].b * 256 * 256;
+
+		string attCode = DoubleToString(dPreValue);
+		string attName = "";
+		string clrName = _getClrMatName(lStratClr);
+
+		stratCode.push_back(attCode);
+		stratName.push_back(attName);
+		materialName.push_back(clrName);
+	}
+
+	pOctFieldMdl->GetLegend().SetName(strLegendName);
+
+	S3dAppRender3D::cvtStandardCode2GmeLegend(&pOctFieldMdl->GetLegend(), legendType, stratCode, stratName, materialName);
+}
+
+//Block legend
+void CAGeomodel::AttachBlockLegend(gmeGridModel *pOctFieldMdl, vector<double> vBreaks, vector<gme_color4> vCols, string strLegendName)
+{
+	if (vBreaks.empty() || vCols.empty())
+	{
+		return;
+	}
+
+	vector<string> stratCode;
+	vector<string> stratName;
+	vector<string> materialName;
+	GME_LEGEND_TYPE legendType = GME_LT_COLOR;
+
+	double dPreValue = 0.0;
+	double dNextValue = 0.0;
+	long   lStratClr = 0;
+	int	   index = 0;
+
+	for (size_t i = 0; i < vBreaks.size() - 1; i++)
+	{
+		if (i == 0)
+		{
+			dPreValue = vBreaks[i];
+		}
+		else
+		{
+			dPreValue = vBreaks[i] + 0.01;
+		}
+
+		dNextValue = vBreaks[i + 1];
+		lStratClr = vCols[index].r + vCols[index].g * 256 + vCols[index].b * 256 * 256;
+
+		index++;
+		string attCode = DoubleToString(dPreValue) + "～" + DoubleToString(dNextValue);
+		string attName = " " + std::to_string(index) + "level" +"The proportion is:"+ DoubleToString(PerVolume[i]) + "%";
+		string clrName = _getClrMatName(lStratClr);
+
+		stratCode.push_back(attCode);
+		stratName.push_back(attName);
+		materialName.push_back(clrName);
+	}
+
+	PerVolume.clear();
+	reverseVec(stratCode);
+	reverseVec(stratName);
+	reverseVec(materialName);
+
+	pOctFieldMdl->GetLegend().SetName(strLegendName);
+
+	S3dAppRender3D::cvtStandardCode2GmeLegend(&pOctFieldMdl->GetLegend(), legendType, stratCode, stratName, materialName);
+}
+
+
+//negation
+long CAGeomodel::reverseVec(vector<string>&vec)
+{
+	if (vec.size() <= 0)
+		return 0;
+	vector<string>::iterator iter = vec.begin();
+	vector<string>::iterator riter = vec.end();
+	for (; iter != riter; iter++)
+	{
+		riter--;
+		if (iter == riter)
+			return 1;
+		string tmp = *iter;
+		*iter = *riter;
+		*riter = tmp;
+	}
+	return 1;
+}
+
+
+//According to the color band and attribute value to the color
+gme_color4 CAGeomodel::getGmeColor4(double val, gmeGridModel::FieldColorMap& colorMap)
+{
+	gme_color4 gmColor;
+	gmeGridModel::GME_COLOR_TYPE clrType = colorMap.fieldColorType;
+	vector<std::pair<double, gme_color4>>& colorVec = colorMap.vFieldColors;
+	if (clrType == gmeGridModel::GME_COLOR_TYPE::GME_CL_DISCRETE)
+	{
+		for (int i = 0; i < colorVec.size() - 1; i++)
+		{
+			std::pair<double, gme_color4>& color1 = colorVec[i];
+			std::pair<double, gme_color4>& color2 = colorVec[i + 1];
+			if (val >= color1.first && val < color2.first)
+			{
+				gmColor = colorVec[i].second;
+				return gmColor;
+			}
+		}
+	}
+	else if (clrType == gmeGridModel::GME_COLOR_TYPE::GME_CL_CONTINUE)
+	{
+		for (int i = 0; i < colorVec.size(); i++)
+		{
+			std::pair<double, gme_color4>& color = colorVec[i];
+			if (fabs(color.first - val) <= 1e-5)
+			{
+				gmColor = colorVec[i].second;
+				return gmColor;
+			}
+		}
+	}
+	return gmColor;
+}
+
+
+//
+void CAGeomodel::setOctFieldColor(gmeGridModel * octFieldGeom, vector<double>& breakVals)
+{
+	//Computation break point
+	vector<gme_color4>	vecColors;
+	int iLevelNum = ui.spinBox_LevelNum->text().toInt();  //Model rendering progression
+	GetColorEvenlyByQgsColorRamp(iLevelNum, ui.toolButton_ClrBanding, vecColors);
+
+	//Colour band
+	gmeGridModel::FieldColorMap fieldColor;
+	fieldColor.fieldColorType = gmeGridModel::GME_COLOR_TYPE::GME_CL_DISCRETE;
+
+	std::pair<double, gme_color4> invalidCol;
+	invalidCol.first = invalid;
+	invalidCol.second = gme_color4(1.0, 1.0, 1.0, 0.0);
+	fieldColor.vFieldColors.emplace_back(invalidCol);
+
+	int iBreakNum = breakVals.size();
+
+	if (iBreakNum == vecColors.size() + 1)
+	{
+		vecColors.emplace_back(0.0, 0.0, 0.0, 1.0);  //black --- Complementary color
+	}
+	if (iBreakNum == vecColors.size())
+	{
+		for (int i = 0; i < iBreakNum; i++)
+		{
+			std::pair<double, gme_color4> ValColor;
+
+			if (i == iBreakNum - 1)
+			{
+				ValColor.first = breakVals.at(i) + 1;
+			}
+			else
+			{
+				ValColor.first = breakVals.at(i);
+			}
+
+			ValColor.second = vecColors.at(i);
+			fieldColor.vFieldColors.push_back(ValColor);
+		}
+	}
+
+	octFieldGeom->SetColorMap(fieldColor);
+	m_gme_field_color = fieldColor; // Temporary ribbon value
+	m_break_vals = breakVals; // Temporary segmentation
+	// Add array to hold breakpoint values and ribbon values for each property
+
+}
+
+//Ribbon color acquisition - Evenly divide the ribbon according to the level
+void CAGeomodel::GetColorEvenlyByQgsColorRamp(int iLevelNo, QgsColorRampButton *toolButton_ClrBanding, vector<gme_color4>& vCols)
+{
+	vCols.clear();
+
+	gme_color4 clr;
+	QgsColorRamp *pRamp = toolButton_ClrBanding->colorRamp();
+	if (pRamp == NULL)
+	{
+		return;
+	}
+
+	int iTmpLevelNo = iLevelNo - 1;
+	for (int index = 0; index < iLevelNo; index++)
+	{
+		QColor qclr;
+		if (iLevelNo == 1)
+			qclr = pRamp->color(0);
+		else
+			qclr = pRamp->color((double)index / iTmpLevelNo);
+
+		clr.r = qclr.red();
+		clr.g = qclr.green();
+		clr.b = qclr.blue();
+		clr.a = qclr.alpha();
+
+		vCols.push_back(clr);
+	}
+}
+
+//Build color table
+bool CAGeomodel::CreateColorTab(vector<double> vecBreaks, vector<gme_color4> vecCols, int iDiscrete, string& colorTab)
+{
+	if (vecBreaks.empty() || vecCols.empty())
+	{
+		return false;
+	}
+	if (vecCols.size() != vecBreaks.size())
+	{
+		if (vecCols.size() != vecBreaks.size() - 1)
+		{
+			return false;
+		}
+	}
+
+	osgDB::ofstream ofstrFile;
+	ofstrFile.open(colorTab.c_str(), std::ios::out);
+	if (!ofstrFile.is_open())
+		return false;
+
+	//Write file version and color table corresponding quantity
+	std::string str = "ColorMap 2.0";
+	ofstrFile << str << std::endl;
+	ofstrFile << vecBreaks.size() + 1 << std::endl;
+
+	ofstrFile << -999999;
+	ofstrFile << " ";
+	ofstrFile << 1.0;
+	ofstrFile << " ";
+	ofstrFile << 1.0;
+	ofstrFile << " ";
+	ofstrFile << 1.0;
+	ofstrFile << " ";
+	ofstrFile << 0; //Invalid value transparency
+	ofstrFile << " ";
+	ofstrFile << std::endl;
+
+	if (iDiscrete == 0)
+	{
+		for (size_t i = 0; i < vecBreaks.size(); i++)
+		{
+			ofstrFile << vecBreaks[i];
+			ofstrFile << " ";
+			ofstrFile << vecCols[i].r;
+			ofstrFile << " ";
+			ofstrFile << vecCols[i].g;
+			ofstrFile << " ";
+			ofstrFile << vecCols[i].b;
+			ofstrFile << " ";
+			ofstrFile << vecCols[i].a;
+			ofstrFile << " ";
+			ofstrFile << std::endl;
+		}
+	}
+	else
+	{
+		for (size_t i = 0, j = 0; i < vecBreaks.size() - 1 && j < vecCols.size(); i++, j++)
+		{
+			if (i == 0)
+			{
+				ofstrFile << vecBreaks[i];
+			}
+			else
+			{
+				ofstrFile << vecBreaks[i] + 0.01;
+			}
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].r;
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].g;
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].b;
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].a;
+			ofstrFile << " ";
+			ofstrFile << std::endl;
+
+			ofstrFile << vecBreaks[i + 1];
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].r;
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].g;
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].b;
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].a;
+			ofstrFile << " ";
+			ofstrFile << std::endl;
+		}
+	}
+
+	//Write current save time Year - month - day Hour: minute: second
+	time_t timep;
+	time(&timep); /* Time to get the time_t structure, UTC time */
+	struct tm* p = localtime(&timep); /* Local time converted to struct tm structure */
+
+	string strFormat = "%Y-%m-%d  %H:%M:%S";  // Customize the format
+	char cTimeStr[255] = "\0";  //The first argument to /strftime is char*
+	strftime(cTimeStr, sizeof(cTimeStr), strFormat.c_str(), p);
+
+	ofstrFile << cTimeStr << std::endl;
+
+	ofstrFile.close();
+
+	return true;
+}
+
+
+//Batch selection
+void CAGeomodel::BatchSelectComply()
+{
+	if (ui.checkBox_BatchSelect->isChecked())
+	{
+		int iTabNo = ui.comboBox_TestData->currentIndex();
+
+		//Batch selection interface
+		FieldBatchSelectDialog batchSelectDlg;
+		std::vector<std::string> vecInTabNameC;
+		std::vector<std::vector<std::string>> vvecInFldNameC;
+		for (int i = 0; i < m_AllTblFlds.size(); i++)
+		{
+			TblFlds& tblFlds = m_AllTblFlds[i];
+			vecInTabNameC.push_back(tblFlds.tblNameC);
+			std::vector<std::string> InFldNameC;
+			for (int j = 0; j < tblFlds.fldNames.size(); j++)
+			{
+				InFldNameC.push_back(tblFlds.fldNames[j].second);
+			}
+			vvecInFldNameC.push_back(InFldNameC);
+		}
+		//Pass in all table names and field names
+		batchSelectDlg.ReceiveInitData(iTabNo, vecInTabNameC, vvecInFldNameC);
+
+		if (batchSelectDlg.exec() != QDialog::Accepted)
+		{
+			ui.checkBox_BatchSelect->setChecked(false);
+			return;
+		}
+
+		//Main interface experiment data and property data are not optional
+		ui.comboBox_TestData->setEnabled(false);
+		ui.comboBox_FieldPara->setEnabled(false);
+
+		std::map<int, std::vector<int>> mapTabAddFldNo = batchSelectDlg.GetCurTabAddFld();
+		//Retrieves all selected table and field names
+		m_SelectFlds.clear();
+
+		for (auto iter = mapTabAddFldNo.begin(); iter != mapTabAddFldNo.end(); iter++)
+		{
+			TblFlds selectFlds;
+			TblFlds tblFlds = m_AllTblFlds[iter->first];
+			selectFlds.tblName = tblFlds.tblName;
+			selectFlds.tblNameC = tblFlds.tblNameC;
+              
+			for (int j = 0; j < iter->second.size(); j++)
+			{
+				selectFlds.fldNames.push_back(tblFlds.fldNames[iter->second[j]]);
+			}
+			m_SelectFlds.push_back(selectFlds);
+		}
+
+		ui.lineEdit_MdlName->setText(QStringLiteral("Three-dimensional evaluation model"));
+	    reatfun();
+		ShowTable();
+	}
+	else
+	{
+		ui.comboBox_TestData->setEnabled(true);
+		ui.comboBox_FieldPara->setEnabled(true);
+
+		SetMdlName();
+		stdTable->clear();
+
+	}
+	
+}
+
+//Weight superposition calculation
+std::vector<double> CAGeomodel::CalWeight(std::vector<vector<double>> pAttVaArr, std::vector<double> fldsWeight, std::string modelName) {
+	     vector<double> CalWeightResult;
+		 vector<double> NewCalist;
+		 double casum;
+	for (int i = 0; i < pAttVaArr.size(); i++) {
+		vector<double> patemp1 = pAttVaArr[i];
+		for (int j = 0; j < patemp1.size(); j++) {
+			casum = patemp1[j] * fldsWeight[i];
+			if (patemp1[j] == invalid) {
+				casum = 0;
+			}
+			if (i==0) {
+				CalWeightResult.push_back(casum);
+			}
+			else {
+				CalWeightResult[j] = CalWeightResult[j] + casum;
+			}
+		}
+	}
+	      NewCalist = DeterInvalid(CalWeightResult);
+	      return   NewCalist;//
+}
+//叠加计算
+void  CAGeomodel::CalWeight(std::vector<std::vector<double>> CalArr, vector<double> Weight, gmeGridModel* w_OctFieldGeom, std::vector<vector<double>> w_breakVals) {
+	for (int i = 0; i < CalArr.size(); i++) {
+    //Take the array, the outer ring is the table, the inner ring is the property field, and the inner ring is the value
+		//The part presented here can be used for weight matching and segment point calculation of attributes in the same evaluation
+		//The numbers of the breakpoints and weights are distinguished here
+		for (int j = 0; j < CalArr[i].size();j++) {
+      //Take out the value
+			//Declares the value of the evaluated variable
+			std::vector<double> CalResults;
+			double temp = 0;
+			//temp= CalArr[i][j]*
+		}
+	}
+}
+
+void  CAGeomodel::WriteWeight(std::vector<std::vector<MappingRange>> m_MapRange, std::vector<double>  a_allweight) {
+}
+
+
+//The value after the weight is superimposed/not used
+void CAGeomodel::CalWeightResult(std::vector<std::vector<MappingRange>> all_mapRange) {
+	std::vector<std::vector<MappingRange>> new_mapRange;
+	vector<MappingRange> new_maplist;
+	MappingRange maptemp;
+	double thweight;
+	double newvalue;
+	for (int i = 0; i < all_mapRange.size(); i++) { //单
+		for (int j = 0; j < all_mapRange[i].size(); j++) {
+			maptemp  = all_mapRange[i][j];
+			thweight = fldsWeight[i];  //weight
+			newvalue = maptemp.RangeIndex;//New value
+		}
+		new_maplist.push_back(maptemp);
+	}
+	 new_mapRange.push_back(new_maplist);
+}
+
+//Prepare/preobtain breakpoints
+void CAGeomodel::reatfun() {
+	bool isBatchSelect = ui.checkBox_BatchSelect->isChecked();
+	std::string name = "";
+	if (!isBatchSelect)
+	{
+		m_SelectFlds.clear();
+		TblFlds selectFld;
+		selectFld.tblName = ui.comboBox_TestData->currentData().toString().toLocal8Bit().data();
+		selectFld.tblNameC = ui.comboBox_TestData->currentText().toLocal8Bit().data();
+		std::string  fldName = ui.comboBox_FieldPara->currentData().toString().toLocal8Bit().data();
+		std::string fldNameC = ui.comboBox_FieldPara->currentText().toLocal8Bit().data();
+		if (fldName != "")
+		{
+			selectFld.fldNames.push_back({ fldName,fldNameC });
+			name = ui.lineEdit_MdlName->text().toLocal8Bit().data();
+			m_SelectFlds.push_back(selectFld);
+		}
+       //Increase display
+
+	}
+	gmeModel* model = getCurrentModel();
+	if (model == nullptr)
+	{
+		QMessageBox::information(this, QStringLiteral("Tips"), QStringLiteral("No structural model data was obtained！"));
+		return;
+	}
+	if (m_SelectFlds.empty())
+	{
+		QMessageBox::information(this, QStringLiteral("Tips"), QStringLiteral("Please select a field！"));
+		return;
+	}
+
+	gme_rect_3d box;
+	model->GetBox(box);
+
+	std::vector<gme_vector2d> vecpolygon;
+	vecpolygon.push_back({ box.xmin,box.ymin });
+	vecpolygon.push_back({ box.xmax,box.ymin });
+	vecpolygon.push_back({ box.xmax,box.ymax });
+	vecpolygon.push_back({ box.xmin,box.ymax });
+	vecpolygon.push_back({ box.xmin,box.ymin });
+
+	int count = 0;
+
+	std::vector<std::pair<InnerName, std::vector<attDataStru>>> samples;
+	std::vector<int> vecSuccessNo;
+
+	for (int i = 0; i < m_SelectFlds.size(); i++)
+	{
+		samples.clear();
+		vecSuccessNo.clear();
+		GetSampleData(m_SelectFlds[i], vecpolygon, samples, vecSuccessNo);//The sample values of each attribute are obtained
+
+		for (int j = 0; j < samples.size(); j++)
+		{
+			//name = "Attribute model_" + getDefaultName(samples[j].first);
+
+			//if (isBatchSelect) {
+				name = ui.lineEdit_MdlName->text().toLocal8Bit().data();//Multi-attribute evaluation model name/user input
+				CalbreakVals(samples[j], box, name);
+			//}
+		}
+	}
+}
+
+
+
+//Computed breakpoint
+void CAGeomodel::CalbreakVals(std::pair<InnerName, std::vector<attDataStru>>& samples, gme_rect_3d& box, std::string modelName) {
+
+	double dxSize = ui.lineEdit_X->text().toDouble();  //Grid big and small
+	double dySize = ui.lineEdit_Y->text().toDouble();
+	double dzSize = ui.lineEdit_Z->text().toDouble();
+
+	//Attribute data analysis
+	attAnalyCls analyCls;
+	int isLoadSampe = analyCls.loadSampleDots(samples.second);
+	if (isLoadSampe == 0)
+	{
+		return;
+	}
+
+	map<std::string, vector<gme_vector4d>> mapSampledots;
+	analyCls.GetAllLayerDatas(mapSampledots); //Obtain strata corresponding sample data
+
+	//Attribute data interpolation/attribute modeling parameters
+	attMdlParam attParam;
+	attParam.dx = dxSize;
+	attParam.dy = dySize;
+	attParam.dz = dzSize;
+	//attParam.attName = samples.first.FldName;//Negligible name
+	attParam.attName=modelName;//Best taken from the defined name, easy to modify
+
+
+	map<std::string, vector<gmeEntity*>> mapEntyModel;	//entity in the structure model
+	GetMapEntity(getCurrentModel(), mapEntyModel);
+
+	attCreateCls createCls;
+	createCls.setMdlParam(attParam);
+	createCls.loadSampleDatas(mapSampledots);
+	createCls.loadGeoEntity(mapEntyModel);
+	createCls.setMdlBox(box);
+	createCls.Create3dGridMdl();
+	createCls.Cal3dGridAttVal();
+	//Select storage location
+	//string vtkpath = SelectoutputPath(attParam.attName);
+	//createCls.GeoAttMdl2VTK(vtkpath);//Output the property model to a csv/vtk file
+	//QMessageBox::information(this, QStringLiteral("Tips"), QStringLiteral("The file is successfully saved to the local PC"));
+
+	/*gme_rect_3d mdl_box;
+	long x_num = 0, y_num = 0, z_num = 0;
+	gme_vector3d  xyz_gap, min_pnt, max_pnt;*/
+	vector<double>* pAttValues = NULL;
+	createCls.OutPutAttMdlDatas(&mdl_box, &x_num, &y_num, &z_num, &xyz_gap, &min_pnt, &max_pnt, &pAttValues);
+
+	  // Attribute value after preprocessing interpolation
+	if (samples.first.TblName == TBL_LOADTEST_TBL && samples.first.FldName == TBL_LOADTEST_FLD_YSKYZ)
+	{ 
+    // The "MPa" attribute of the load test results table needs to be addressed
+		std::vector<std::string> strat_code_list;
+		createCls.getAttrValsCode(strat_code_list);//Returns the stratigraphic code for each cell
+		std::map<std::string, gm_strat_type> strat_reference;
+		for (auto strat_it = m_strat_info_list.begin(); strat_it != m_strat_info_list.end(); ++strat_it)
+		{
+			strat_reference[strat_it->m_stratCode] = gm_strat_type(strat_it->m_stratType);
+		}
+		preProcess(*pAttValues, strat_code_list, strat_reference);
+	}
+	  //Computation break point
+		std::vector<double> breakVals;
+		pAttVaArr.push_back(*pAttValues);  //Temporary storage
+		AttBreaksSet(*pAttValues, breakVals);//Computation break point
+		  
+		MappingRange mappindex;
+		mappindex.breakpot = breakVals;
+
+//Table display, edit
+void CAGeomodel::ShowTable(){
+	stdTable = new QStandardItemModel(this);//Display table
+	stdTable->setColumnCount(8);
+	ui.tableView_show->setModel(stdTable);
+	ui.tableView_show->resizeColumnsToContents(); //Adaptive width
+	int breakcol;//Number of breakpoints, number of interval columns
+
+	//Segment data display column data preparation
+	vector<MappingRange> maptemp;
+	MappingRange mapinclude;
+	std::vector<double> breakArr; //Single-attribute breakpoint
+	int breaksize;
+	std::vector<std::vector<double>> allbreaks;
+	//Get an array of multi-breakpoint arrays；
+	for (int m = 0; m < m_MapRange.size(); m++) {
+		maptemp = m_MapRange[m]; //Single data structure
+		for (int n = 0; n < maptemp.size(); n++) {
+			mapinclude = maptemp[n]; //Analytic data
+			int breakssize = mapinclude.breakpot.size();  //Single-attribute breakpoint
+			for (int s = 0; s < breakssize; s++) {   //Record the breakpoint staging
+				double tempoots = mapinclude.breakpot[s];
+				breakArr.push_back(tempoots);
+			}
+			allbreaks.push_back(breakArr);
+			breaksize = breakArr.size();
+			breakArr.clear();
+		}
+	}
+	m_MapRange.clear();
+   //The number of rows is the number of factors
+	int rownum = allbreaks.size();
+	stdTable->clear();
+	stdTable->setHorizontalHeaderItem(0, new QStandardItem(QStringLiteral("Factor name")));
+	stdTable->setHorizontalHeaderItem(1, new QStandardItem(QStringLiteral("Factor weight")));
+	for (int i = 2; i < breaksize+2; i++) {
+		stdTable->setHorizontalHeaderItem(i, new QStandardItem(QStringLiteral("section")));
+	}
+
+	std::vector<string> fnameArr;
+	for (int i = 0; i < m_SelectFlds.size(); i++) {
+		TblFlds tbltemp = m_SelectFlds[i];
+		for (int j = 0; j < tbltemp.fldNames.size(); j++) {
+			string fname = tbltemp.fldNames[j].second;
+			fnameArr.push_back(fname);	
+		}
+	}//First column
+	for (int na = 0; na < fnameArr.size();na++) {
+		string relname = fnameArr[na];
+		stdTable->setItem(na, 0, new QStandardItem(QString::fromLocal8Bit(relname.c_str())));
+		
+		stdTable->setItem(na, 1, new QStandardItem(QString::fromLocal8Bit("0")));
+	}
+	    fnameArr.clear();
+		for (int i = 0; i < allbreaks.size(); i++){
+			breakArr = allbreaks[i];
+			breakcol = breakArr.size();
+			for (int j = 0; j < breakcol; j++) {
+				double potvalue = breakArr[j];
+				string potva = DoubleToString(potvalue);
+	       stdTable->setItem(i, j+2, new QStandardItem(QString::fromLocal8Bit(potva.c_str())));
+
+			}
+	    }
+   //Set read-only cannot be edited
+		//ReadOnlyDelegate* readOnlyDelegate = new ReadOnlyDelegate();
+		ui.tableView_show->setItemDelegateForColumn(2, new ReadOnlyDelegate(this)); //Set a column to read only
+		ui.tableView_show->setItemDelegateForColumn(breakcol+1, new ReadOnlyDelegate(this));
+
+}
+
+void CAGeomodel::onOKclicked()
+{
+	//weight
+	int rowcount = stdTable->rowCount();
+	int colcount = stdTable->columnCount();
+	fldsWeight.clear();
+	double sum = 0;
+	for (int i = 0; i < rowcount; i++)
+	{
+		fldsWeight.push_back(stdTable->data(stdTable->index(i, 1)).toDouble());
+		sum += stdTable->data(stdTable->index(i, 1)).toDouble();
+	}
+
+	if (sum != 1)
+	{
+		QMessageBox::critical(NULL, QStringLiteral("警告"), QStringLiteral("The factor weight and sum are not 1, please re-enter"));
+		return;
+	}
+
+	//Breakpoint judgment
+	std::vector<double> breakpot;
+	breakpot.clear();
+	for (int j = 0; j < rowcount; j++) {
+		for (int i = 2; i < colcount; i++) {
+			breakpot.push_back(stdTable->data(stdTable->index(j, i)).toDouble());
+		}
+			breakpots.push_back(breakpot);
+			breakpot.clear();
+	}
+
+	//Ascending judgment
+	int breaknum = breakpots.size();
+	for (int i = 0; i < breaknum;i++){
+    //Factor number
+		vector<double> breaktemps;
+		breaktemps = breakpots[i];
+		int ktemps = breaktemps.size();
+		for (int j = 0; j < ktemps-1; j++) {
+			if (breaktemps[j] < breaktemps[j + 1])
+				continue;
+			else
+			QMessageBox::critical(NULL, QStringLiteral("warn"), QStringLiteral("The range does not match, please re-enter"));
+			return;
+		}
+
+	}
+		 breakpots.clear(); //This empty space is easy to test and finally serves as the final breakpoint array
+}
+
+
+void CAGeomodel::visualEvaluationModel(gmeGridModel* octFieldModel,std::string name) {
+	Smart3dMap::Container * pContaienr = S3dm3dRenderRegister::cvtGmeGridModel23dLayer(octFieldModel);
+	if (pContaienr)
+	{
+		pContaienr->setDisplayName(name);
+		pContaienr->setVisible(true);
+	}
+
+	OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+	//Setting aside
+	pAttVaArr.clear();
+	//m_MapRange.clear();
+	std::string str = "complete" + name + "Model construction！";
+	QMessageBox::information(this, QStringLiteral("Tips"), QString::fromLocal8Bit(str.c_str()));
+
+}
