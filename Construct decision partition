@@ -1123,5 +1123,34 @@ void CAGeomodel::visualEvaluationModel(gmeGridModel* octFieldModel,std::string n
 	//m_MapRange.clear();
 	std::string str = "complete" + name + "Model construction！";
 	QMessageBox::information(this, QStringLiteral("Tips"), QString::fromLocal8Bit(str.c_str()));
-
 }
+//Weight calculation result
+void CAGeomodel::buildNewOct(vector<double> *pAttValues,std::string modelName) {
+	
+	//Build attribute model
+	gme_vector3d localOrigin(mdl_box.min_x, mdl_box.min_y, mdl_box.min_z);
+	gmeLocalAxis localAxis(localOrigin, gme_radian_d(0), gme_radian_d(0)); //Local coordinate system
+
+	gme_vector3d minPt = localAxis.GlobalToLocal(min_pnt);
+	gme_vector3d maxPt = localAxis.GlobalToLocal(max_pnt); //Bounding box - Global to local
+
+	gme_vector3d cellSize(xyz_gap.x, xyz_gap.y, xyz_gap.z);
+	//gmeField field1(samples.first.FldName, gmeFieldValue::gmeType::Type_Real64);
+
+	/*gmeField field1;
+	field1.SetInvalidValue(to_string(invalid));
+	gmeFields schema;
+	schema.Append(field1);*/
+
+	gmeField field1(modelName, gmeFieldValue::gmeType::Type_Real64);
+	field1.SetInvalidValue(to_string(invalid));
+	gmeFields schema;
+	schema.Append(field1);
+
+	gmeGridModel* pOctFieldGeom = new gmeGridModel(modelName, localAxis, maxPt, cellSize, schema);
+
+	const gme_vector3i& dim = pOctFieldGeom->GetDimension();
+
+	long xSpan = dim.x;
+	long ySpan = dim.y;
+	long zSpan = dim.z;
