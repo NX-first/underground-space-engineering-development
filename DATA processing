@@ -1,0 +1,64 @@
+#pragma endregion
+#pragma region 
+string CAGeomodel::DoubleToString(double x)
+{
+	stringstream ss;
+	ss << std::fixed << x;
+	return ss.str();
+}
+
+double CAGeomodel::StringToDouble(string x)
+{
+	double ss;
+	ss = atof(x.c_str());
+	return ss;
+}
+
+bool CAGeomodel::inVector(string str, vector<string> Number2Strat)
+{
+	bool minVector = false;
+	for (auto strat : Number2Strat) {
+		if (strat == str)
+			minVector = true;
+	}
+	return minVector;
+}
+#pragma endregion
+
+
+
+//get
+void CAGeomodel::GetMdlLayerData(std::map<int, std::pair<std::string, gmeModel*>>& m_Models)
+{
+	//The layer where all the structure models are located under the root layer
+	m_Models.clear();
+	//Root node
+	Container* pRootLayer = OgFrameWork::getSingletonPtr()->getDefault3DLayerManager()->getRootContainer();
+	if (pRootLayer == NULL)
+	{
+		return;
+	}
+
+	int iChildLayerNum = pRootLayer->getNumChildren();
+	if (iChildLayerNum <= 0)
+	{
+		return;
+	}
+
+	Container* root3d = OgFrameWork::getSingleton().getDefault3DLayerManager()->getRootContainer();
+	std::vector<S3dmBaseGroup*> groups;
+	S3dBaseLayerManager::getSingle().getContainerAllGroup(root3d, groups);
+	//Obtain all geological structure model nodes under three dimensional root nodes
+	int k = 0;
+	for (int i = 0; i < groups.size(); i++)
+	{
+		S3dmBase3dGroup* base3dgroup = dynamic_cast<S3dmBase3dGroup*>(groups[i]);
+		if (base3dgroup)
+		{
+			std::pair<std::string, gmeModel*> model;
+			model.first = base3dgroup->getDisplayName();
+			model.second = base3dgroup->getGmeModel();
+			m_Models[k++] = model;
+		}
+	}
+}
