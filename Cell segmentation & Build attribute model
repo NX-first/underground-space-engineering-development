@@ -1,0 +1,241 @@
+//chosse
+void CAGeomodel::SelectMdlData() {
+	//Model data --&gt; Bounding box boundary range, number of grids, model name
+	int iMdlNo = ui.comboBox_MdlData->currentIndex();  //当前模型序号
+	if (m_Models.find(iMdlNo) == m_Models.end())
+	{
+		return;
+	}
+	gmeModel *structuralMdl = m_Models[iMdlNo].second;
+	if (structuralMdl == nullptr)
+	{
+		return;
+	}
+
+	//Bounding box acquisition
+	gme_rect_3d structBox;
+	structuralMdl->GetBox(structBox);
+
+	double dMdlXmin = structBox.xmin;
+	double dMdlXmax = structBox.xmax;
+	double dMdlYmin = structBox.ymin;
+	double dMdlYmax = structBox.ymax;
+	double dMdlZmin = structBox.zmin;
+	double dMdlZmax = structBox.zmax;
+
+
+	//Model boundary range initialization
+	ui.lineEdit_Xmin->setText(QString::number(dMdlXmin, 'f', 2));
+	ui.lineEdit_Ymin->setText(QString::number(dMdlYmin, 'f', 2));
+	ui.lineEdit_Zmin->setText(QString::number(dMdlZmin, 'f', 2));
+	ui.lineEdit_Xmax->setText(QString::number(dMdlXmax, 'f', 2));
+	ui.lineEdit_Ymax->setText(QString::number(dMdlYmax, 'f', 2));
+	ui.lineEdit_Zmax->setText(QString::number(dMdlZmax, 'f', 2));
+
+	//The number of grids is initialized
+	double dXL = dMdlXmax - dMdlXmin;
+	double dYL = dMdlYmax - dMdlYmin;
+	double dZL = dMdlZmax - dMdlZmin;
+
+	double dgapxy = sqrt(pow(dXL, 2) + pow(dYL, 2));
+	int iSize = ceil(dgapxy / 200);
+
+	ui.lineEdit_X->setText(QString::number(iSize));
+	ui.lineEdit_Y->setText(QString::number(iSize));
+	ui.lineEdit_Z->setText(QString::number(1));
+
+	int iXNum = ceil(dXL / iSize);
+	ui.lineEdit_nX->setText(QString::number(iXNum));
+
+	int iYNum = ceil(dYL / iSize);
+	ui.lineEdit_nY->setText(QString::number(iYNum));
+
+	int iZNum = ceil(dZL);
+	ui.lineEdit_nZ->setText(QString::number(iZNum));
+
+	//Model name setting
+	//SetMdlName();
+    
+	//Gets the property sheet/property field
+	//SelectTestData();
+
+
+
+}
+
+	void CAGeomodel::getData()
+	{
+	m_Models.clear();
+	GetMdlLayerData(m_Models);
+
+
+	ui.comboBox_MdlData->clear();
+	for (auto iter = m_Models.begin(); iter != m_Models.end(); iter++)
+	{
+		ui.comboBox_MdlData->addItem(QString::fromLocal8Bit(iter->second.first.c_str()));
+	}
+	if (m_Models.size() > 0)
+	{
+		ui.comboBox_MdlData->setCurrentIndex(0);
+		SelectMdlData(); //Supplementary calculation
+	}
+
+	//Obtain the experimental table, classification method is not clickable
+	ui.pushButton_GetTestTab->setEnabled(false);
+	ui.pushButton_ClassMeth->setEnabled(false);
+
+	//Get the experiment table/properties
+	ui.comboBox_TestData->clear();//先清理，避免重复加载
+	GetTestTabAddFldName(m_AllTblFlds);
+
+	//Acquisition classification method
+	ui.comboBox_ClassMethod->clear();//先清理，避免重复加载
+	GetClassMeth();
+
+	//Initialize the header
+	//stdTable = new QStandardItemModel(this);//显示表格
+	//stdTable->setColumnCount(4);
+	//ui.tableView_show->setModel(stdTable);
+	//ui.tableView_show->resizeColumnsToContents(); //自适应宽度
+	//stdTable->clear();
+	//stdTable->setHorizontalHeaderItem(0, new QStandardItem(QStringLiteral("因子名称")));
+	//stdTable->setHorizontalHeaderItem(1, new QStandardItem(QStringLiteral("因子权重")));
+
+
+	//Reset model name
+	ui.lineEdit_MdlName->clear();//重置
+	SetMdlName();
+}
+
+
+//Set model name
+void CAGeomodel::SetMdlLayerName(const QString& qstrStrucMdlName, const QString& qstrFieldName,QLineEdit *lineEdit_MdlName)
+	{
+		QString qstrMdlName;
+		if (qstrStrucMdlName != "")
+		{
+			if (qstrFieldName != "")
+			{
+				qstrMdlName = qstrStrucMdlName + QStringLiteral("_") + qstrFieldName;
+			}
+			else
+			{
+				qstrMdlName = qstrStrucMdlName + QStringLiteral("_None");
+			}
+		}
+		else
+		{
+			if (qstrFieldName != "")
+			{
+				qstrMdlName = QStringLiteral("结构模型_") + qstrFieldName;
+			}
+			else
+			{
+				qstrMdlName = QStringLiteral("结构模型_None");
+			}
+		}
+
+		lineEdit_MdlName->setText(qstrMdlName);
+	}
+
+//Get experiment table
+void CAGeomodel::TestGetTbl() {
+	GetTestTabAddFldName(m_AllTblFlds);
+}
+
+
+//Set model name
+void CAGeomodel::SetMdlName()
+{
+	QString qstrStrucMdlName = ui.comboBox_MdlData->currentText();
+	QString qstrFieldName = ui.lineEdit_MdlName->text();
+	SetMdlLayerName(qstrStrucMdlName, qstrFieldName, ui.lineEdit_MdlName);
+}
+
+
+
+//Select volume element
+gmeModel * CAGeomodel::getCurrentModel()
+{
+	int index = ui.comboBox_MdlData->currentIndex();
+	if (m_Models.find(index) != m_Models.end())
+	{
+		return m_Models[index].second;
+	}
+
+	return nullptr;
+}
+
+gmeGridModel* CAGeomodel::buildOctFieldModelStru(gme_rect_3d& box, std::string modelName)
+{
+	double dxSize = ui.lineEdit_X->text().toDouble();  //Set the grid size
+	double dySize = ui.lineEdit_Y->text().toDouble();
+	double dzSize = ui.lineEdit_Z->text().toDouble();
+
+	OgAppResLoadingIterator::getSingleton().editStatusCmd("栅格化中");
+
+
+	//Set parameters
+	attMdlParam attParam;
+	attParam.dx = dxSize;
+	attParam.dy = dySize;
+	attParam.dz = dzSize;
+	attParam.attName = "Structural model to rasterized model";
+
+	map<std::string, vector<gmeEntity*>> mapEntyModel;	//entit in the structure modely;
+	GetMapEntity(getCurrentModel(), mapEntyModel);
+	map<string, int> basLayersVec; //Serial number corresponding to the standard stratum
+	getStratIdByCode(mapEntyModel, basLayersVec);
+
+
+	attCreateCls createCls;//Attribute data creation
+	createCls.setMdlParam(attParam);// Loading structure model: formation code mapping structure model
+	createCls.loadGeoEntity(mapEntyModel);// Load all formation models at once
+	createCls.setMdlBox(box); //Pass the box to the model
+	createCls.setStdStrat(basLayersVec);//Set the serial number corresponding to the standard stratum
+	
+	//string pathvtk = "G:/vtk/strumodel.vtk";
+	string pathvtk = "G:/VTK_ColorTable/Strumodel.vtk";
+	createCls.geoStruMdl2VTK(pathvtk, true);//out
+
+
+	long x_num = 0, y_num = 0, z_num = 0;
+	gme_vector3d  xyz_gap, min_pnt, max_pnt;
+	gme_rect_3d mdl_box2;
+	vector<double>* pAttValues = NULL;
+	createCls.OutPutAttMdlDatas(&mdl_box2, &x_num, &y_num, &z_num, &xyz_gap, &min_pnt, &max_pnt, &pAttValues);
+	
+	OgAppResLoadingIterator::getSingleton().editStatusProg(60);
+
+	//Build attribute model
+	gme_vector3d localOrigin(mdl_box2.min_x, mdl_box2.min_y, mdl_box2.min_z);
+	gmeLocalAxis localAxis(localOrigin, gme_radian_d(0), gme_radian_d(0)); //局部坐标系
+
+	gme_vector3d minPt = localAxis.GlobalToLocal(min_pnt);
+	gme_vector3d maxPt = localAxis.GlobalToLocal(max_pnt); //包围盒-全局转局部
+
+	gme_vector3d cellSize(xyz_gap.x, xyz_gap.y, xyz_gap.z);
+
+	gmeField field1;
+	field1.SetInvalidValue(to_string(invalid));
+	gmeFields schema;
+	schema.Append(field1);
+
+	gmeGridModel* pOctFieldGeom =new gmeGridModel(modelName, localAxis, maxPt, cellSize, schema);
+
+	const gme_vector3i& dim = pOctFieldGeom->GetDimension();
+
+	long xSpan = dim.x;
+	long ySpan = dim.y;
+	long zSpan = dim.z;
+
+	if (pAttValues->size() == xSpan * ySpan * zSpan)
+	{
+		pOctFieldGeom->SetCellsValue(field1.GetName(), {0,0,0}, xSpan, ySpan, zSpan, &(*pAttValues)[0]);
+		OgAppResLoadingIterator::getSingleton().editStatusProg(80);
+
+		return pOctFieldGeom;
+
+	}
+	return nullptr;
+}
