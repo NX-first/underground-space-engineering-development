@@ -1,0 +1,130 @@
+//oct
+gmeGridModel* CAGeomodel::buildOctFieldModel1(std::pair<InnerName, std::vector<attDataStru>>& samples, gme_rect_3d& box, std::string modelName)
+{
+	double dxSize = ui.lineEdit_X->text().toDouble();  //Grid big and small
+	double dySize = ui.lineEdit_Y->text().toDouble();
+	double dzSize = ui.lineEdit_Z->text().toDouble();
+
+	OgAppResLoadingIterator::getSingleton().editStatusCmd("Rasterized");
+
+	//Attribute data analysis
+	attAnalyCls analyCls;
+	int isLoadSampe = analyCls.loadSampleDots(samples.second);
+	if (isLoadSampe == 0)
+	{
+		return nullptr;
+	}
+
+	map<std::string, vector<gme_vector4d>> mapSampledots;
+	analyCls.GetAllLayerDatas(mapSampledots); //
+
+	//Attribute data interpolation/attribute modeling parameters
+	attMdlParam attParam;
+	attParam.dx = dxSize;
+	attParam.dy = dySize;
+	attParam.dz = dzSize;
+	attParam.attName = samples.first.FldName;
+	
+
+	map<std::string, vector<gmeEntity*>> mapEntyModel;	// entity in the structure model
+	GetMapEntity(getCurrentModel(), mapEntyModel); 
+
+	attCreateCls createCls;
+	createCls.setMdlParam(attParam);
+	createCls.loadSampleDatas(mapSampledots);
+	createCls.loadGeoEntity(mapEntyModel);
+	createCls.setMdlBox(box);
+	createCls.Create3dGridMdl();
+	createCls.Cal3dGridAttVal();
+	//string vtkpath = "G:/vtk/test01.vtk";
+	//string vtkpath = "G:/VTK_ColorTable/test01.vtk";
+	//Select storage location
+	//string vtkpath = SelectoutputPath(attParam.attName);
+
+	//createCls.GeoAttMdl2VTK(vtkpath);// Output the property model to a csv/vtk file
+	//QMessageBox::information(this, QStringLiteral("Tips"), QStringLiteral("The file is successfully saved to the local PC"));
+
+	vector<double>* pAttValues = NULL;
+	createCls.OutPutAttMdlDatas(&mdl_box, &x_num, &y_num, &z_num, &xyz_gap, &min_pnt, &max_pnt, &pAttValues);
+	OgAppResLoadingIterator::getSingleton().editStatusProg(60);
+	//pAttValues = &CalWeight(pAttVaArr, fldsWeight, modelName);
+	//Add processing. Map pAttValues to integer values such as 1, 2, 3, and 4 based on the grading standard
+	//Find the breakpoint and return a new pAttValues array
+	//pAttValues->size() == xSpan * ySpan * zSpan，
+
+	  // Attribute value after preprocessing interpolation
+	if (samples.first.TblName == TBL_LOADTEST_TBL && samples.first.FldName == TBL_LOADTEST_FLD_YSKYZ)
+	{ // The "MPa" attribute of the load test results table needs to be addressed
+		std::vector<std::string> strat_code_list;
+		createCls.getAttrValsCode(strat_code_list);//Returns the stratigraphic code for each cell
+		std::map<std::string, gm_strat_type> strat_reference;
+		for (auto strat_it = m_strat_info_list.begin(); strat_it != m_strat_info_list.end(); ++strat_it)
+		{
+			strat_reference[strat_it->m_stratCode] = gm_strat_type(strat_it->m_stratType);
+		}
+		preProcess(*pAttValues, strat_code_list, strat_reference);
+	}
+
+	// Build the attribute model
+	gme_vector3d localOrigin(mdl_box.min_x, mdl_box.min_y, mdl_box.min_z);
+	gmeLocalAxis localAxis(localOrigin, gme_radian_d(0), gme_radian_d(0)); //Local coordinate system
+
+	gme_vector3d minPt = localAxis.GlobalToLocal(min_pnt);
+	gme_vector3d maxPt = localAxis.GlobalToLocal(max_pnt); // Surround box - Global to local
+
+	gme_vector3d cellSize(xyz_gap.x, xyz_gap.y, xyz_gap.z);
+
+	gmeField field1(samples.first.FldName, gmeFieldValue::gmeType::Type_Real64);
+	field1.SetInvalidValue(to_string(invalid));
+	gmeFields schema;
+	schema.Append(field1);
+
+	gmeGridModel* pOctFieldGeom = new gmeGridModel(modelName, localAxis, maxPt, cellSize, schema);
+
+	const gme_vector3i& dim = pOctFieldGeom->GetDimension();
+
+	long xSpan = dim.x;
+	long ySpan = dim.y;
+	long zSpan = dim.z;
+
+	if (pAttValues->size() == xSpan * ySpan * zSpan)
+	{
+		pOctFieldGeom->SetCellsValue(field1.GetName(), {0,0,0}, xSpan, ySpan, zSpan, &(*pAttValues)[0]);
+
+		OgAppResLoadingIterator::getSingleton().editStatusProg(80);
+		
+		
+		vector<double> breakVals;
+		AttBreaksSet(*pAttValues, breakVals);// Calculate break point 815
+	
+		//calweight()
+		//std::vector<std::vector<double>> m_selectArr;// Stores each attribute value
+		//m_selectArr.emplace_back(pAttValues);//
+		//std::vector<vector<double>> w_breakVals;//Temporary breakpoint
+		//w_breakVals.emplace_back(breakVals);//
+		//std::vector<std::vector<double>> select_Weight;//Temporary weight
+		//select_Weight.emplace_back(select_Weight);//
+		//Call calweight() function for traversal calculation, value, breakpoint, weight superposition calculation
+
+
+		setOctFieldColor(pOctFieldGeom, breakVals);//paint
+
+		gmeGridModel* pAttrModel = buildOctFieldModel(pOctFieldGeom);
+
+		gmeGridModel::FieldColorMap fieldColor;
+		fieldColor = pOctFieldGeom->GetColorMap();
+
+
+		vector<gme_color4> colors;	//Legend color
+		//i=0 is the invalid value color, and i=size-1 is the meaningless supplementary color
+		for (size_t i = 1; i < fieldColor.vFieldColors.size() - 1; i++)
+		{
+			colors.push_back(fieldColor.vFieldColors[i].second);
+		}
+       
+		setOctFieldLegend(pAttrModel, breakVals, colors);//Set Legend 815
+
+		return pAttrModel;
+	}
+	return nullptr;
+}
