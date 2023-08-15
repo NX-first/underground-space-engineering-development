@@ -1,0 +1,189 @@
+//Gets the entity in the structure model and calculates the hole range
+void CAGeomodel::GetMapEntity(gmeModel *pGmeMdl, map<string, vector<gmeEntity*>>& mapEntyModel)
+{
+	mapEntyModel.clear();
+
+	vector<gmeEntity*> vecEnt;
+	vector<gme_vector3d> vecHoleData;
+	vector<gme_vector3d> tmpVecRng;
+
+	if (pGmeMdl == NULL)
+	{
+		return;
+	}
+
+	const std::vector<gmeFeatureCls*>& featClses = pGmeMdl->GetAllFeatureCls();
+
+	for (int i = 0; i < featClses.size(); i++)
+	{
+		gmeFeatureCls* featCls = featClses.at(i);
+		if (featCls == nullptr)
+			continue;
+
+		int featNum = featCls->GetFeatureNum();
+		for (size_t gfindex = 0; gfindex < featNum; gfindex++)
+		{
+			gmeFeature * pGmefeat = featCls->GetFeatureAt(gfindex);
+			gmeGeoEntity* pGeoEnt = (gmeGeoEntity*)pGmefeat->GetAGeometry(0);
+
+			vecEnt.clear();
+			string featName = pGmefeat->GetName();
+
+			long entNum = pGeoEnt->GetEntityNum();//The next layer of geological entity is geometry
+			for (size_t k = 0; k < entNum; ++k)
+			{
+				gmeEntity *pEnt = pGeoEnt->GetAEntity(k);
+				if (pEnt == NULL)
+					continue;
+
+				vecEnt.push_back(pEnt);
+			}
+
+			mapEntyModel[featName] = vecEnt;
+		}
+	}
+}
+
+gmeGridModel * CAGeomodel::buildOctFieldModel(gmeGridModel * octFieldGeom)
+{
+	return octFieldGeom;
+}
+
+//Independent of the structural model
+gmeGridModel * CAGeomodel::buildOctFieldModel2(gmeGridModel * octFieldGeom)
+{
+	return octFieldGeom;
+}
+
+//Attribute model rasterize 
+// Start modeling
+void CAGeomodel::StartFieldModeling()
+{
+	OgAppResLoadingIterator::getSingleton().editStatusProg(0);
+	bool isBatchSelect = ui.checkBox_BatchSelect->isChecked();
+	std::string name = "";
+	if (!isBatchSelect)
+	{
+		m_SelectFlds.clear();
+		TblFlds selectFld;
+		selectFld.tblName = ui.comboBox_TestData->currentData().toString().toLocal8Bit().data();
+		selectFld.tblNameC = ui.comboBox_TestData->currentText().toLocal8Bit().data();
+		std::string  fldName = ui.comboBox_FieldPara->currentData().toString().toLocal8Bit().data();
+		std::string fldNameC = ui.comboBox_FieldPara->currentText().toLocal8Bit().data();
+		if (fldName != "")
+		{
+			selectFld.fldNames.push_back({ fldName,fldNameC });
+			name = ui.lineEdit_MdlName->text().toLocal8Bit().data();
+			m_SelectFlds.push_back(selectFld);
+		}
+	}
+	gmeModel* model = getCurrentModel();
+	if (model == nullptr)
+	{
+		QMessageBox::information(this, QStringLiteral("Tips"), QStringLiteral("No structural model data was obtained！"));
+		return;
+	}
+	if (m_SelectFlds.empty())
+	{
+		QMessageBox::information(this, QStringLiteral("Tips"), QStringLiteral("Please select a field！"));
+		return;
+	}
+
+	gme_rect_3d box;
+	model->GetBox(box);
+
+	std::vector<gme_vector2d> vecpolygon;
+	vecpolygon.push_back({ box.xmin,box.ymin });
+	vecpolygon.push_back({ box.xmax,box.ymin });
+	vecpolygon.push_back({ box.xmax,box.ymax });
+	vecpolygon.push_back({ box.xmin,box.ymax });
+	vecpolygon.push_back({ box.xmin,box.ymin });
+
+	int count = 0;
+
+
+	std::vector<std::pair<InnerName, std::vector<attDataStru>>> samples;
+	std::vector<int> vecSuccessNo;
+
+	for (int i = 0; i < m_SelectFlds.size(); i++)
+	{
+		OgAppResLoadingIterator::getSingleton().editStatusProg(20);
+
+		samples.clear();
+		vecSuccessNo.clear();
+		GetSampleData(m_SelectFlds[i], vecpolygon, samples, vecSuccessNo);//The sample values of each attribute are obtained
+		
+		OgAppResLoadingIterator::getSingleton().editStatusProg(40);
+		for(int j = 0; j < samples.size(); j++)
+		{
+			name = "Attribute model_" + getDefaultName(samples[j].first);
+
+			if (isBatchSelect) {
+				//Save data
+				//std::vector<vector<std::pair<InnerName, std::vector<attDataStru>>>> m_Have_SelectFlds;//Select a multi-attribute array
+				//std::vector<double> duandianzhi;
+				//std::vector<double> m_fldsWeight;//Weight array
+				//m_Have_SelectFlds.emplace_back(samples[j]);
+				//Call the breakpoint function to find the breakpoint of each attribute
+				//Call the weight calculation function and write the weight after getting the segmentation point
+				//Determine the breakpoint first and then the weight
+
+				name = ui.lineEdit_MdlName->text().toLocal8Bit().data();//Multi-attribute evaluation model name/user input
+				
+
+			}
+	       
+			//reveal：
+			gmeGridModel* octFieldModel = buildOctFieldModel1(samples[j], box, name);//
+
+			if (octFieldModel != nullptr)
+			{
+				Smart3dMap::Container * pContaienr = S3dm3dRenderRegister::cvtGmeGridModel23dLayer(octFieldModel);
+				if (pContaienr)
+				{
+					pContaienr->setDisplayName(name);
+					pContaienr->setVisible(true);
+				}
+				count++;
+			}
+		}
+	}
+
+	OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+
+	if (count == 0)
+	{
+		QMessageBox::information(this, QStringLiteral("Tips"), QStringLiteral("No modeling data was obtained！"));
+	}
+	else
+	{
+		std::string str = "complete" + to_string(count) + "A property model is constructed！";
+		QMessageBox::information(this, QStringLiteral("Tips"), QString::fromLocal8Bit(str.c_str()));
+	}
+
+}
+
+//Structure model rasterization/save only
+void CAGeomodel::StartFieldstruModel()
+{
+	OgAppResLoadingIterator::getSingleton().editStatusProg(0);
+	std::string name = "The structure model is rasterized";
+
+	gmeModel* model = getCurrentModel();
+	if (model == nullptr)
+	{
+		QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("No structural model data was obtained！"));
+		return;
+	}
+
+	gme_rect_3d box;
+	model->GetBox(box);
+
+	int count = 0;
+
+	OgAppResLoadingIterator::getSingleton().editStatusProg(40);
+
+	gmeGridModel* octFieldModel = buildOctFieldModelStru(box, name);//
+	QMessageBox::information(this, QStringLiteral("Tips"), QStringLiteral("Save to local"));
+	OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+}
