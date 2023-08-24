@@ -1,0 +1,3070 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.1321
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CA_GmeGeomodel", "CA_GmeGeomodel.vcxproj", "{B144B1EF-A71E-4580-9097-4A4697775608}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		MinSizeRel|x64 = MinSizeRel|x64
+		MinSizeRel|x86 = MinSizeRel|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+		RelWithDebInfo|x64 = RelWithDebInfo|x64
+		RelWithDebInfo|x86 = RelWithDebInfo|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B144B1EF-A71E-4580-9097-4A4697775608}.Debug|x64.ActiveCfg = Debug|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.Debug|x64.Build.0 = Debug|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.Debug|x86.ActiveCfg = Debug|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.MinSizeRel|x64.ActiveCfg = Release|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.MinSizeRel|x64.Build.0 = Release|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.MinSizeRel|x86.ActiveCfg = Release|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.MinSizeRel|x86.Build.0 = Release|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.Release|x64.ActiveCfg = Release|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.Release|x64.Build.0 = Release|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.Release|x86.ActiveCfg = Release|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.RelWithDebInfo|x64.ActiveCfg = Release|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.RelWithDebInfo|x64.Build.0 = Release|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.RelWithDebInfo|x86.ActiveCfg = Release|x64
+		{B144B1EF-A71E-4580-9097-4A4697775608}.RelWithDebInfo|x86.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {853B9700-D0E1-4475-8E9D-5B36655828AE}
+	EndGlobalSection
+EndGlobal
+
+
+#include "CAGeomodel.h"
+#include "OGFrameWork.h"
+#include "OGGme3DLayerGuid.h"
+//
+#include "cpl_conv.h"
+#include "gdal_priv.h"
+#include "s3d_KerAttMdl.h"
+#include "FileTools.h"
+#include "DictDataMng.h"
+#include "s3d_statistic_algo.h"
+#include "FieldBatchSelectDialog.h"
+#include "S3dmBase2dGroup.h"
+#include "S3dmBase3dGroup.h"
+#include "S3dBaseLayerManager.h"
+#include "FieldStructDef.h"
+#include "S3dAppModelDataParse.h"
+#include "S3dm3dRenderRegister.h"
+#include "S3dAppStdStratSelectDlg.h"
+#include <vector>
+#include "S3dAppRender3D.h"
+//
+#include <iomanip>
+
+#define  mx  1
+
+//评价块状图例名称
+const std::string LEGEND_NAME_SUITABLE = "适宜";
+const std::string LEGEND_COLOR_RELATIVESUITABLE = "较适宜";
+const std::string LEGEND_COLOR_GENERALSUITABLE = "一般适宜";
+const std::string LEGEND_COLOR_LESSSUITABLE = "较不适宜";
+
+//评价模型中的无效值
+#define INVALIDVALUE 0
+
+using namespace Smart3dMap;
+
+CAGeomodel::CAGeomodel(QWidget *qgsWidget): QWidget(qgsWidget)
+{
+	ui.setupUi(this);
+	connect(ui.lineEdit_X, SIGNAL(textEdited(const QString &)), this, SLOT(X_textEdited(const QString &)));
+	connect(ui.lineEdit_Y, SIGNAL(textEdited(const QString &)), this, SLOT(Y_textEdited(const QString &)));
+	connect(ui.lineEdit_Z, SIGNAL(textEdited(const QString &)), this, SLOT(Z_textEdited(const QString &)));
+	connect(ui.lineEdit_nX, SIGNAL(textEdited(const QString &)), this, SLOT(nX_textEdited(const QString &)));
+	connect(ui.lineEdit_nY, SIGNAL(textEdited(const QString &)), this, SLOT(nY_textEdited(const QString &)));
+	connect(ui.lineEdit_nZ, SIGNAL(textEdited(const QString &)), this, SLOT(nZ_textEdited(const QString &)));
+	connect(ui.lineEdit_weight, SIGNAL(textEdited(const QString &)), this, SLOT(weight_textEdited(const QString &)));
+	connect(ui.lineEdit_radiu, SIGNAL(textEdited(const QString &)), this, SLOT(radiu_textEdited(const QString &)));
+	connect(ui.comboBox_MdlData, SIGNAL(currentIndexChanged(QString)), this, SLOT(SelectMdlData()));//下拉框
+	connect(ui.pushButton_Getmdl, SIGNAL(clicked()), this, SLOT(getData()));//获取模型
+	connect(ui.pushButton_Grid, SIGNAL(clicked()), this, SLOT(GeoStruMdl2Vtk()));//栅格模型
+	connect(ui.comboBox_TestData, SIGNAL(currentIndexChanged(QString)), this, SLOT(SelectTestData()));//实验表下拉
+	connect(ui.pushButton_GetTestTab, SIGNAL(clicked()), this, SLOT(TestGetTbl()));//实验表获取
+	connect(ui.checkBox_BatchSelect, SIGNAL(clicked()), this, SLOT(BatchSelectComply()));//复选属性
+	connect(ui.comboBox_FieldPara, SIGNAL(currentIndexChanged(QString)), this, SLOT());//属性字段下拉
+	connect(ui.pushButton_AttModl, SIGNAL(clicked()), this, SLOT(StartFieldModeling()));//属性建模
+	connect(ui.comboBox_ClassMethod, SIGNAL(currentIndexChanged(QString)), this, SLOT(ClassifyMethod()));//分类方法下拉
+	connect(ui.pushButton_ClassMeth, SIGNAL(clicked()), this, SLOT(GetClassMeth()));//获取分类方法
+	connect(ui.spinBox_LevelNum, SIGNAL(clicked()), this, SLOT(ShowTable()));//spinBox_LevelNum 分级后加载显示
+	connect(ui.button_OK, SIGNAL(clicked()), this, SLOT(onOKclicked()));//表格确认
+	connect(ui.pushButton_EvaModel, SIGNAL(clicked()), this, SLOT(Buildwigmodel()));//评价模型
+	connect(ui.pushButton_openFaultFile, SIGNAL(clicked()), this, SLOT(OpenproFile()));
+	connect(ui.comboBox_nei, SIGNAL(currentIndexChanged(int)), this, SLOT(changeCellnei(int)));
+	connect(ui.comboBox_rule, SIGNAL(currentIndexChanged(int)), this, SLOT(changeCellrule(int)));
+	connect(ui.radioparity_true, SIGNAL(clicked()), this, SLOT(ParityClicked()));
+	connect(ui.radioparity_false, SIGNAL(clicked()), this, SLOT(ParityClicked()));
+	connect(ui.radioonce_true, SIGNAL(clicked()), this, SLOT(onceClicked()));
+	connect(ui.radioonce_false, SIGNAL(clicked()), this, SLOT(onceClicked()));
+	connect(ui.radiomerge_true, SIGNAL(clicked()), this, SLOT(mergeClicked()));
+	connect(ui.radiomerge_false, SIGNAL(clicked()), this, SLOT(mergeClicked()));
+	connect(ui.widget, SIGNAL(close()), this, SLOT(closeEvent()));
+	ui.toolButton_ClrBanding->setColorRampFromName("Spectral");
+	connect(ui.createFieldCubeModel, SIGNAL(clicked()), SLOT(BuildFieldModel()));
+	connect(ui.createFieldCubeModel_2, SIGNAL(clicked()), SLOT(initCellModel()));
+	m_pOctGeoField = NULL;
+
+	m_Con = S3dAppStdStratSelectDlg::getCurrentStdStratCon();
+	m_StdStratId = S3dAppStdStratSelectDlg::getCurrentStdStratVer().second;
+}
+
+CAGeomodel::~CAGeomodel()
+{
+}
+
+
+#pragma region 初始化
+void CAGeomodel::X_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		gmeModel* model = getCurrentModel();
+		if (model == nullptr)
+		{
+			string value = str.toLocal8Bit();
+			cellSize.x = atof(value.c_str());
+			nX = ceil(xL / cellSize.x);
+			ui.lineEdit_nX->setText(QString::fromLocal8Bit(std::to_string(nX).c_str()));
+			ui.lineEdit_nX->setCursorPosition(0);
+		}
+		else {
+			gme_rect_3d box;
+			model->GetBox(box);
+
+			std::string strXSize = (std::string)str.toLocal8Bit();
+			double dBoxXL = box.max_x - box.min_x;
+			double dXSize = atof(strXSize.c_str());
+			int iXNum = ceil(dBoxXL / dXSize);
+			ui.lineEdit_nX->setText(QString::number(iXNum));
+		}
+	}
+	else
+	{
+		ui.lineEdit_nX->setText("");
+	}
+}
+
+void CAGeomodel::Y_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		gmeModel* model = getCurrentModel();
+		if (model == nullptr)
+		{
+			string value = str.toLocal8Bit();
+			
+			cellSize.y = atof(value.c_str());
+			nY = ceil(yL / cellSize.y);
+			ui.lineEdit_nY->setText(QString::fromLocal8Bit(std::to_string(nY).c_str()));
+			ui.lineEdit_nY->setCursorPosition(0);
+		}
+		//}
+		else {
+			gme_rect_3d box;
+			model->GetBox(box);
+
+			std::string strYSize = (std::string)str.toLocal8Bit();
+			double dBoxYL = box.max_y - box.min_y;
+			double dYSize = atof(strYSize.c_str());
+			int iYNum = ceil(dBoxYL / dYSize);
+			ui.lineEdit_nY->setText(QString::number(iYNum));
+		}
+	}
+	else
+	{
+		ui.lineEdit_nY->setText("");
+	}
+}
+
+void CAGeomodel::Z_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		gmeModel* model = getCurrentModel();
+		if (model == nullptr)
+		{
+			string value = str.toLocal8Bit();
+			
+			cellSize.z = atof(value.c_str());
+			nZ = ceil(zL / cellSize.z);
+			ui.lineEdit_nZ->setText(QString::fromLocal8Bit(std::to_string(nZ).c_str()));
+			ui.lineEdit_nZ->setCursorPosition(0);
+			
+		}
+		else
+		{
+			gme_rect_3d box;
+			model->GetBox(box);
+
+			std::string strZSize = (std::string)str.toLocal8Bit();
+			double dBoxZL = box.max_z - box.min_z;
+			double dZSize = atof(strZSize.c_str());
+			int iZNum = ceil(dBoxZL / dZSize);
+			ui.lineEdit_nZ->setText(QString::number(iZNum));
+		}
+	}
+	else
+	{
+		ui.lineEdit_nZ->setText("");
+	}
+}
+
+void CAGeomodel::nX_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		gmeModel* model = getCurrentModel();
+		if (model == nullptr)
+		{
+			string value = str.toLocal8Bit();
+			
+			nX = atof(value.c_str());
+			cellSize.x = xL / (nX);
+			cellSize.x += 0.0001;
+			ui.lineEdit_X->setText(QString::fromLocal8Bit(DoubleToString(cellSize.x).c_str()));
+			ui.lineEdit_X->setCursorPosition(0);
+		}
+		
+		else {
+			gme_rect_3d box;
+			model->GetBox(box);
+
+			std::string iXNum = (std::string)str.toLocal8Bit();
+			double dBoxL = box.max_x - box.min_x;
+			int Xnum = atof(iXNum.c_str());
+			double dXSize = ceil(dBoxL / Xnum);
+			ui.lineEdit_X->setText(QString::number(dXSize));
+		}
+	}
+	else
+	{
+		ui.lineEdit_X->setText("");
+	}
+}
+
+void CAGeomodel::nY_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		gmeModel* model = getCurrentModel();
+		if (model == nullptr)
+		{
+			string value = str.toLocal8Bit();
+			
+			nY = atof(value.c_str());
+			cellSize.y = yL / (nY);
+			cellSize.y += 0.0001;
+			ui.lineEdit_Y->setText(QString::fromLocal8Bit(DoubleToString(cellSize.y).c_str()));
+			ui.lineEdit_Y->setCursorPosition(0);
+			
+		}
+		else {
+			gme_rect_3d box;
+			model->GetBox(box);
+
+			std::string iYNum = (std::string)str.toLocal8Bit();
+			double dBoxL = box.max_y - box.min_y;
+			int Ynum = atof(iYNum.c_str());
+			double dYSize = ceil(dBoxL / Ynum);
+			ui.lineEdit_Y->setText(QString::number(dYSize));
+		}
+	}
+	else
+	{
+		ui.lineEdit_Y->setText("");
+	}
+}
+
+void CAGeomodel::nZ_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		gmeModel* model = getCurrentModel();
+		if (model == nullptr)
+		{
+			string value = str.toLocal8Bit();
+			
+			nZ = atof(value.c_str());
+			cellSize.z = zL / (nZ);
+			cellSize.z += 0.0001;
+			ui.lineEdit_Z->setText(QString::fromLocal8Bit(DoubleToString(cellSize.z).c_str()));
+			ui.lineEdit_Z->setCursorPosition(0);
+			
+		}
+		else {
+			gme_rect_3d box;
+			model->GetBox(box);
+
+			std::string iZNum = (std::string)str.toLocal8Bit();
+			double dBoxL = box.max_z - box.min_z;
+			int Znum = atof(iZNum.c_str());
+			double dZSize = ceil(dBoxL / Znum);
+			ui.lineEdit_Z->setText(QString::number(dZSize));
+		}
+	}
+	else
+	{
+		ui.lineEdit_Z->setText("");
+	}
+}
+
+void CAGeomodel::weight_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		string value = str.toLocal8Bit();
+		disWeight =StringToDouble(value);
+	}
+}
+
+void CAGeomodel::radiu_textEdited(const QString &str)
+{
+	if (str != "")
+	{
+		string value = str.toLocal8Bit();
+		IDWradiu = StringToDouble(value);
+	}
+}
+
+#pragma endregion
+
+#pragma region 常用函数
+string CAGeomodel::DoubleToString(double x)
+{
+	stringstream ss;
+	ss << std::fixed << x;
+	return ss.str();
+}
+
+double CAGeomodel::StringToDouble(string x)
+{
+	double ss;
+	ss = atof(x.c_str());
+	return ss;
+}
+
+bool CAGeomodel::inVector(string str, vector<string> Number2Strat)
+{
+	bool minVector = false;
+	for (auto strat : Number2Strat) {
+		if (strat == str)
+			minVector = true;
+	}
+	return minVector;
+}
+#pragma endregion
+
+
+
+//获取
+void CAGeomodel::GetMdlLayerData(std::map<int, std::pair<std::string, gmeModel*>>& m_Models)
+{
+	//根图层下所有的结构模型所在图层
+	m_Models.clear();
+	//根节点
+	Container* pRootLayer = OgFrameWork::getSingletonPtr()->getDefault3DLayerManager()->getRootContainer();
+	if (pRootLayer == NULL)
+	{
+		return;
+	}
+
+	int iChildLayerNum = pRootLayer->getNumChildren();
+	if (iChildLayerNum <= 0)
+	{
+		return;
+	}
+
+	Container* root3d = OgFrameWork::getSingleton().getDefault3DLayerManager()->getRootContainer();
+	std::vector<S3dmBaseGroup*> groups;
+	S3dBaseLayerManager::getSingle().getContainerAllGroup(root3d, groups);
+	//获取三维根节点下的所有地质结构模型节点
+	int k = 0;
+	for (int i = 0; i < groups.size(); i++)
+	{
+		S3dmBase3dGroup* base3dgroup = dynamic_cast<S3dmBase3dGroup*>(groups[i]);
+		if (base3dgroup)
+		{
+			std::pair<std::string, gmeModel*> model;
+			model.first = base3dgroup->getDisplayName();
+			model.second = base3dgroup->getGmeModel();
+			m_Models[k++] = model;
+		}
+	}
+}
+
+//选择
+void CAGeomodel::SelectMdlData() {
+	//模型数据-->包围盒边界范围、格网数目、模型名称
+	int iMdlNo = ui.comboBox_MdlData->currentIndex();  //当前模型序号
+	if (m_Models.find(iMdlNo) == m_Models.end())
+	{
+		return;
+	}
+	gmeModel *structuralMdl = m_Models[iMdlNo].second;
+	if (structuralMdl == nullptr)
+	{
+		return;
+	}
+
+	//包围盒获取
+	gme_rect_3d structBox;
+	structuralMdl->GetBox(structBox);
+
+	double dMdlXmin = structBox.xmin;
+	double dMdlXmax = structBox.xmax;
+	double dMdlYmin = structBox.ymin;
+	double dMdlYmax = structBox.ymax;
+	double dMdlZmin = structBox.zmin;
+	double dMdlZmax = structBox.zmax;
+
+
+	//模型边界范围初始化
+	ui.lineEdit_Xmin->setText(QString::number(dMdlXmin, 'f', 2));
+	ui.lineEdit_Ymin->setText(QString::number(dMdlYmin, 'f', 2));
+	ui.lineEdit_Zmin->setText(QString::number(dMdlZmin, 'f', 2));
+	ui.lineEdit_Xmax->setText(QString::number(dMdlXmax, 'f', 2));
+	ui.lineEdit_Ymax->setText(QString::number(dMdlYmax, 'f', 2));
+	ui.lineEdit_Zmax->setText(QString::number(dMdlZmax, 'f', 2));
+
+	//格网数目初始化
+	double dXL = dMdlXmax - dMdlXmin;
+	double dYL = dMdlYmax - dMdlYmin;
+	double dZL = dMdlZmax - dMdlZmin;
+
+	double dgapxy = sqrt(pow(dXL, 2) + pow(dYL, 2));
+	int iSize = ceil(dgapxy / 200);
+
+	ui.lineEdit_X->setText(QString::number(iSize));
+	ui.lineEdit_Y->setText(QString::number(iSize));
+	ui.lineEdit_Z->setText(QString::number(1));
+
+	int iXNum = ceil(dXL / iSize);
+	ui.lineEdit_nX->setText(QString::number(iXNum));
+
+	int iYNum = ceil(dYL / iSize);
+	ui.lineEdit_nY->setText(QString::number(iYNum));
+
+	int iZNum = ceil(dZL);
+	ui.lineEdit_nZ->setText(QString::number(iZNum));
+
+	//模型名称设置
+	//SetMdlName();
+    
+	//获取属性表/属性字段
+	//SelectTestData();
+
+
+
+}
+
+	void CAGeomodel::getData()
+	{
+	m_Models.clear();
+	GetMdlLayerData(m_Models);
+
+
+	ui.comboBox_MdlData->clear();
+	for (auto iter = m_Models.begin(); iter != m_Models.end(); iter++)
+	{
+		ui.comboBox_MdlData->addItem(QString::fromLocal8Bit(iter->second.first.c_str()));
+	}
+	if (m_Models.size() > 0)
+	{
+		ui.comboBox_MdlData->setCurrentIndex(0);
+		SelectMdlData(); //补充计算
+	}
+
+	//获取实验表、分类方法不可点击
+	ui.pushButton_GetTestTab->setEnabled(false);
+	ui.pushButton_ClassMeth->setEnabled(false);
+
+	//获取实验表/属性
+	ui.comboBox_TestData->clear();//先清理，避免重复加载
+	GetTestTabAddFldName(m_AllTblFlds);
+
+	//获取分类方法
+	ui.comboBox_ClassMethod->clear();//先清理，避免重复加载
+	GetClassMeth();
+
+	//初始化表头
+	//stdTable = new QStandardItemModel(this);//显示表格
+	//stdTable->setColumnCount(4);
+	//ui.tableView_show->setModel(stdTable);
+	//ui.tableView_show->resizeColumnsToContents(); //自适应宽度
+	//stdTable->clear();
+	//stdTable->setHorizontalHeaderItem(0, new QStandardItem(QStringLiteral("因子名称")));
+	//stdTable->setHorizontalHeaderItem(1, new QStandardItem(QStringLiteral("因子权重")));
+
+
+	//重置模型名
+	ui.lineEdit_MdlName->clear();//重置
+	SetMdlName();
+}
+
+
+//设置模型名
+void CAGeomodel::SetMdlLayerName(const QString& qstrStrucMdlName, const QString& qstrFieldName,QLineEdit *lineEdit_MdlName)
+	{
+		QString qstrMdlName;
+		if (qstrStrucMdlName != "")
+		{
+			if (qstrFieldName != "")
+			{
+				qstrMdlName = qstrStrucMdlName + QStringLiteral("_") + qstrFieldName;
+			}
+			else
+			{
+				qstrMdlName = qstrStrucMdlName + QStringLiteral("_None");
+			}
+		}
+		else
+		{
+			if (qstrFieldName != "")
+			{
+				qstrMdlName = QStringLiteral("结构模型_") + qstrFieldName;
+			}
+			else
+			{
+				qstrMdlName = QStringLiteral("结构模型_None");
+			}
+		}
+
+		lineEdit_MdlName->setText(qstrMdlName);
+	}
+
+//获取实验表
+void CAGeomodel::TestGetTbl() {
+	GetTestTabAddFldName(m_AllTblFlds);
+}
+
+
+//设置模型名称
+void CAGeomodel::SetMdlName()
+{
+	QString qstrStrucMdlName = ui.comboBox_MdlData->currentText();
+	QString qstrFieldName = ui.lineEdit_MdlName->text();
+	SetMdlLayerName(qstrStrucMdlName, qstrFieldName, ui.lineEdit_MdlName);
+}
+
+
+
+//选中
+gmeModel * CAGeomodel::getCurrentModel()
+{
+	int index = ui.comboBox_MdlData->currentIndex();
+	if (m_Models.find(index) != m_Models.end())
+	{
+		return m_Models[index].second;
+	}
+
+	return nullptr;
+}
+
+gmeGridModel* CAGeomodel::buildOctFieldModelStru(gme_rect_3d& box, std::string modelName)
+{
+	double dxSize = ui.lineEdit_X->text().toDouble();  //格网大小
+	double dySize = ui.lineEdit_Y->text().toDouble();
+	double dzSize = ui.lineEdit_Z->text().toDouble();
+
+	OgAppResLoadingIterator::getSingleton().editStatusCmd("栅格化中");
+
+
+	//设置参数
+	attMdlParam attParam;
+	attParam.dx = dxSize;
+	attParam.dy = dySize;
+	attParam.dz = dzSize;
+	attParam.attName = "结构模型转栅格化模型";
+
+	map<std::string, vector<gmeEntity*>> mapEntyModel;	//结构模型中的entity;
+	GetMapEntity(getCurrentModel(), mapEntyModel);
+	map<string, int> basLayersVec; //标准地层对应的序号
+	getStratIdByCode(mapEntyModel, basLayersVec);
+
+
+	attCreateCls createCls;//属性数据创建
+	createCls.setMdlParam(attParam);// 装载结构体模型：地层编码 映射 结构模型
+	createCls.loadGeoEntity(mapEntyModel);// 一次装载所有地层体模型
+	createCls.setMdlBox(box); //传入模型的box
+	createCls.setStdStrat(basLayersVec);//设置标准地层对应的序号
+	
+	//string pathvtk = "G:/vtk/strumodel.vtk";
+	string pathvtk = "G:/VTK_ColorTable/Strumodel.vtk";
+	createCls.geoStruMdl2VTK(pathvtk, true);//输出
+
+
+	 long x_num = 0, y_num = 0, z_num = 0;
+	gme_vector3d  xyz_gap, min_pnt, max_pnt;
+	gme_rect_3d mdl_box2;
+	vector<double>* pAttValues = NULL;
+	createCls.OutPutAttMdlDatas(&mdl_box2, &x_num, &y_num, &z_num, &xyz_gap, &min_pnt, &max_pnt, &pAttValues);
+	
+	OgAppResLoadingIterator::getSingleton().editStatusProg(60);
+
+	//构建属性模型
+	gme_vector3d localOrigin(mdl_box2.min_x, mdl_box2.min_y, mdl_box2.min_z);
+	gmeLocalAxis localAxis(localOrigin, gme_radian_d(0), gme_radian_d(0)); //局部坐标系
+
+	gme_vector3d minPt = localAxis.GlobalToLocal(min_pnt);
+	gme_vector3d maxPt = localAxis.GlobalToLocal(max_pnt); //包围盒-全局转局部
+
+	gme_vector3d cellSize(xyz_gap.x, xyz_gap.y, xyz_gap.z);
+
+	gmeField field1;
+	field1.SetInvalidValue(to_string(invalid));
+	gmeFields schema;
+	schema.Append(field1);
+
+	gmeGridModel* pOctFieldGeom =new gmeGridModel(modelName, localAxis, maxPt, cellSize, schema);
+
+	const gme_vector3i& dim = pOctFieldGeom->GetDimension();
+
+	long xSpan = dim.x;
+	long ySpan = dim.y;
+	long zSpan = dim.z;
+
+	if (pAttValues->size() == xSpan * ySpan * zSpan)
+	{
+		pOctFieldGeom->SetCellsValue(field1.GetName(), {0,0,0}, xSpan, ySpan, zSpan, &(*pAttValues)[0]);
+		OgAppResLoadingIterator::getSingleton().editStatusProg(80);
+
+		return pOctFieldGeom;
+
+	}
+	return nullptr;
+}
+
+
+// 获取结构模型中的entity, 并计算钻孔范围
+void CAGeomodel::GetMapEntity(gmeModel *pGmeMdl, map<string, vector<gmeEntity*>>& mapEntyModel)
+{
+	mapEntyModel.clear();
+
+	vector<gmeEntity*> vecEnt;
+	vector<gme_vector3d> vecHoleData;
+	vector<gme_vector3d> tmpVecRng;
+
+	if (pGmeMdl == NULL)
+	{
+		return;
+	}
+
+	const std::vector<gmeFeatureCls*>& featClses = pGmeMdl->GetAllFeatureCls();
+
+	for (int i = 0; i < featClses.size(); i++)
+	{
+		gmeFeatureCls* featCls = featClses.at(i);
+		if (featCls == nullptr)
+			continue;
+
+		int featNum = featCls->GetFeatureNum();
+		for (size_t gfindex = 0; gfindex < featNum; gfindex++)
+		{
+			gmeFeature * pGmefeat = featCls->GetFeatureAt(gfindex);
+			gmeGeoEntity* pGeoEnt = (gmeGeoEntity*)pGmefeat->GetAGeometry(0);
+
+			vecEnt.clear();
+			string featName = pGmefeat->GetName();
+
+			long entNum = pGeoEnt->GetEntityNum();//地质实体的下一层是几何体
+			for (size_t k = 0; k < entNum; ++k)
+			{
+				gmeEntity *pEnt = pGeoEnt->GetAEntity(k);
+				if (pEnt == NULL)
+					continue;
+
+				vecEnt.push_back(pEnt);
+			}
+
+			mapEntyModel[featName] = vecEnt;
+		}
+	}
+}
+
+gmeGridModel * CAGeomodel::buildOctFieldModel(gmeGridModel * octFieldGeom)
+{
+	return octFieldGeom;
+}
+
+//不依赖结构模型
+gmeGridModel * CAGeomodel::buildOctFieldModel2(gmeGridModel * octFieldGeom)
+{
+	return octFieldGeom;
+}
+
+//属性模型栅格化//开始建模
+void CAGeomodel::StartFieldModeling()
+{
+	OgAppResLoadingIterator::getSingleton().editStatusProg(0);
+	bool isBatchSelect = ui.checkBox_BatchSelect->isChecked();
+	std::string name = "";
+	if (!isBatchSelect)
+	{
+		m_SelectFlds.clear();
+		TblFlds selectFld;
+		selectFld.tblName = ui.comboBox_TestData->currentData().toString().toLocal8Bit().data();
+		selectFld.tblNameC = ui.comboBox_TestData->currentText().toLocal8Bit().data();
+		std::string  fldName = ui.comboBox_FieldPara->currentData().toString().toLocal8Bit().data();
+		std::string fldNameC = ui.comboBox_FieldPara->currentText().toLocal8Bit().data();
+		if (fldName != "")
+		{
+			selectFld.fldNames.push_back({ fldName,fldNameC });
+			name = ui.lineEdit_MdlName->text().toLocal8Bit().data();
+			m_SelectFlds.push_back(selectFld);
+		}
+	}
+	gmeModel* model = getCurrentModel();
+	if (model == nullptr)
+	{
+		QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("未获取到结构模型数据！"));
+		return;
+	}
+	if (m_SelectFlds.empty())
+	{
+		QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("请选择字段！"));
+		return;
+	}
+
+	gme_rect_3d box;
+	model->GetBox(box);
+
+	std::vector<gme_vector2d> vecpolygon;
+	vecpolygon.push_back({ box.xmin,box.ymin });
+	vecpolygon.push_back({ box.xmax,box.ymin });
+	vecpolygon.push_back({ box.xmax,box.ymax });
+	vecpolygon.push_back({ box.xmin,box.ymax });
+	vecpolygon.push_back({ box.xmin,box.ymin });
+
+	int count = 0;
+
+
+	std::vector<std::pair<InnerName, std::vector<attDataStru>>> samples;
+	std::vector<int> vecSuccessNo;
+
+	for (int i = 0; i < m_SelectFlds.size(); i++)
+	{
+		OgAppResLoadingIterator::getSingleton().editStatusProg(20);
+
+		samples.clear();
+		vecSuccessNo.clear();
+		GetSampleData(m_SelectFlds[i], vecpolygon, samples, vecSuccessNo);//得到各属性samples样本值
+		
+		OgAppResLoadingIterator::getSingleton().editStatusProg(40);
+		for(int j = 0; j < samples.size(); j++)
+		{
+			name = "属性模型_" + getDefaultName(samples[j].first);
+
+			if (isBatchSelect) {
+				//另存数据
+				//std::vector<vector<std::pair<InnerName, std::vector<attDataStru>>>> m_Have_SelectFlds;//选择的多属性数组
+				//std::vector<double> duandianzhi;
+				//std::vector<double> m_fldsWeight;//权值数组
+				//m_Have_SelectFlds.emplace_back(samples[j]);
+				//调用求断点函数，求各属性断点后
+				//调用权值计算函数,得到分段点后写入权值
+				//先确定断点后确定权重 
+
+				name = ui.lineEdit_MdlName->text().toLocal8Bit().data();//多属性评价模型名/用户输入
+				
+
+			}
+	       
+			//显示：
+			gmeGridModel* octFieldModel = buildOctFieldModel1(samples[j], box, name);//
+
+			if (octFieldModel != nullptr)
+			{
+				Smart3dMap::Container * pContaienr = S3dm3dRenderRegister::cvtGmeGridModel23dLayer(octFieldModel);
+				if (pContaienr)
+				{
+					pContaienr->setDisplayName(name);
+					pContaienr->setVisible(true);
+				}
+				count++;
+			}
+		}
+	}
+
+	OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+
+	if (count == 0)
+	{
+		QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("未获取到任何建模数据！"));
+	}
+	else
+	{
+		std::string str = "完成" + to_string(count) + "个属性模型构建！";
+		QMessageBox::information(this, QStringLiteral("提示"), QString::fromLocal8Bit(str.c_str()));
+	}
+
+}
+
+//结构模型栅格化/仅保存
+void CAGeomodel::StartFieldstruModel()
+{
+	OgAppResLoadingIterator::getSingleton().editStatusProg(0);
+	std::string name = "结构模型栅格化";
+
+	gmeModel* model = getCurrentModel();
+	if (model == nullptr)
+	{
+		QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("未获取到结构模型数据！"));
+		return;
+	}
+
+	gme_rect_3d box;
+	model->GetBox(box);
+
+	int count = 0;
+
+	OgAppResLoadingIterator::getSingleton().editStatusProg(40);
+
+	gmeGridModel* octFieldModel = buildOctFieldModelStru(box, name);//
+	QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("保存到本地"));
+	OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+}
+
+//实验表名与对应属性参数字段的获取
+void CAGeomodel::GetTestTabAddFldName(std::vector<TblFlds>& tblFldss)
+{
+	tblFldss.clear();
+	std::vector<sysdict_MdlTbl> vecTestTabs;//内部表信息
+
+	//由于当前系统支持多数据库，取数据时需要先进行数据库链接设置
+
+	DictDataMng::getSingletonPtr()->setCurDbConn((__int64)m_Con);
+
+	//获取实验表
+	DictDataMng::getSingletonPtr()->getConfigedTablesByType(TEST_TBL, vecTestTabs);
+
+	for (size_t i = 0; i < vecTestTabs.size(); i++)
+	{
+		std::vector<sysdict_MdlTblFld> vecFields;       //试验属性集合
+		//获取当前表的字段 
+		DictDataMng::getSingletonPtr()->getConfigedFieldsByTable(vecTestTabs[i].innerTblName, EXPERI_ATTR, vecFields);
+		if (vecFields.size() > 0)      
+		{
+			TblFlds tblFlds;
+			tblFlds.tblName = vecTestTabs[i].innerTblName;  //内部表
+			tblFlds.tblNameC = vecTestTabs[i].innerTblNameC;//中文
+			for (int j = 0; j < vecFields.size(); j++)
+			{
+				std::pair<std::string, std::string> fldName;
+				fldName.first = vecFields[j].innerFldName;
+				fldName.second = vecFields[j].innerFldNameC;
+				tblFlds.fldNames.push_back(fldName);
+			}
+			tblFldss.push_back(tblFlds);
+		}
+	}
+	for (int i = 0; i < tblFldss.size(); i++)
+	{
+		TblFlds tblFlds = tblFldss[i];
+		ui.comboBox_TestData->addItem(QString::fromLocal8Bit(tblFlds.tblNameC.c_str()), QString::fromLocal8Bit(tblFlds.tblName.c_str()));
+	    
+	}
+	if (tblFldss.size() > 0)
+	{
+		ui.comboBox_MdlData->setCurrentIndex(0);
+	}
+}
+
+//获取钻孔样本
+bool CAGeomodel::GetSampleData(TblFlds flds, std::vector<gme_vector2d>& vecpolygon,
+	std::vector<std::pair<InnerName, std::vector<attDataStru>>>& samples,
+	std::vector<int>& vecSuccessNo)
+{
+	vector<vector<gme_vector2d>> tmp{ vecpolygon };
+	AttrDBMng::CONDITION_INFO cond(AttrDBMng::SQL_CONDITION::G2D_POLYGON, EQUAL, tmp);
+	std::vector<AttrDBMng::CONDITION_INFO> conds;
+	conds.push_back(cond);
+
+	std::vector<AttrDBMng::TestColumnsData > testDatas;
+	std::vector<std::string> inner_columns;
+	for (int i = 0; i < flds.fldNames.size(); i++)
+	{
+		inner_columns.emplace_back(flds.fldNames[i].first);//字段名
+	}
+	inner_columns.emplace_back(UNION_MACRO_START_DEPTH);
+	inner_columns.emplace_back(UNION_MACRO_END_DEPTH);
+	inner_columns.emplace_back(UNION_MACRO_TCDH);
+
+	int fieldNum = inner_columns.size();
+	AttrDBMng::getSingletonPtr()->getTestColumnsInfo(testDatas, flds.tblName, inner_columns, &conds);//实验表属性查询
+
+	if (testDatas.empty())
+	{
+		return false;
+	}
+
+	//当未取到地层编码时，通过深度去计算地层编码
+	std::string stratCode = "";
+	int stratCodeIndex = fieldNum - 1;
+	int endDepthIndex = fieldNum - 2;
+	int startDepthIndex = fieldNum - 3;
+	testDatas[0].m_column_info_list[stratCodeIndex].getData(stratCode);
+
+	double midDepth = 0;
+	double startDepth = 0;
+	double endDepth = 0;
+
+	if (stratCode == "")
+	{
+		
+		std::vector<HoleInfo> result_list;
+		std::vector<AttrDBMng::CONDITION_INFO> conds;
+		AttrDBMng::CONDITION_INFO cond = { AttrDBMng::STDSTRAT_ID, EQUAL, m_StdStratId };
+		conds.push_back(cond);
+		AttrDBMng::getSingletonPtr()->getHoleAndHoleLayer(result_list, &conds);
+		std::map<int, HoleInfo> mapHoleLists;
+		for (int i = 0; i < result_list.size(); i++)
+		{
+			mapHoleLists[result_list[i].PntID] = result_list[i];
+		}
+
+		for (int i = 0; i < result_list.size(); i++)
+		{
+			testDatas[i].m_column_info_list[stratCodeIndex].getData(stratCode);
+			//如果土层代号为空,则去数据库中取土层代号
+			if (stratCode == "")
+			{
+				int type = testDatas[i].m_column_info_list[startDepthIndex].getDataType();
+				if (type == AutoDataType::Double)
+				{
+					testDatas[i].m_column_info_list[startDepthIndex].getData(startDepth);
+				}
+				else if (type == AutoDataType::Integer)
+				{
+					long tmp_value;
+					testDatas[i].m_column_info_list[startDepthIndex].getData(tmp_value);
+					startDepth = tmp_value;
+				}
+
+				type = testDatas[i].m_column_info_list[endDepthIndex].getDataType();
+				if (type == AutoDataType::Double)
+				{
+					testDatas[i].m_column_info_list[endDepthIndex].getData(endDepth);
+				}
+				else if (type == AutoDataType::Integer)
+				{
+					long tmp_value;
+					testDatas[i].m_column_info_list[endDepthIndex].getData(tmp_value);
+					endDepth = tmp_value;
+				}
+
+				midDepth = (startDepth + endDepth)*0.5;
+				int pntId = testDatas[i].m_n_pnt_id;
+				if (mapHoleLists.find(pntId) != mapHoleLists.end())
+				{
+					HoleInfo& holeInfo = mapHoleLists[pntId];
+					stratCode = getStratCodeByDepth(holeInfo, midDepth);
+					testDatas[i].m_column_info_list[stratCodeIndex] = stratCode;
+				}
+			}
+		}
+	}
+
+	//存放成功取到样本的序号
+	vecSuccessNo.clear();
+
+	samples.clear();
+
+	//将数据放入结构中
+	std::map<std::string, std::vector<attDataStru>> mapSample; //first为字段名//attDataStru样本数据结构
+	for (int i = 0; i < testDatas.size(); i++)
+	{
+		attDataStru attrData;
+		attrData.d4dot.x = testDatas[i].m_d_x;
+		attrData.d4dot.y = testDatas[i].m_d_y;
+
+		int type = testDatas[i].m_column_info_list[startDepthIndex].getDataType();
+		if (type == AutoDataType::Double)
+		{
+			testDatas[i].m_column_info_list[startDepthIndex].getData(startDepth);
+		}
+		else if (type == AutoDataType::Integer)
+		{
+			long tmp_value;
+			testDatas[i].m_column_info_list[startDepthIndex].getData(tmp_value);
+			startDepth = tmp_value;
+		}
+
+		type = testDatas[i].m_column_info_list[endDepthIndex].getDataType();
+		if (type == AutoDataType::Double)
+		{
+			testDatas[i].m_column_info_list[endDepthIndex].getData(endDepth);
+		}
+		else if (type == AutoDataType::Integer)
+		{
+			long tmp_value;
+			testDatas[i].m_column_info_list[endDepthIndex].getData(tmp_value);
+			endDepth = tmp_value;
+		}
+
+		midDepth = (startDepth + endDepth)*0.5;
+		attrData.d4dot.z = testDatas[i].m_d_z - midDepth;
+
+		for (int j = 0; j < inner_columns.size() - 3; j++)
+		{
+			std::string fldAttr = inner_columns[j];
+			AutoDataType::DataType dataType = testDatas[i].m_column_info_list[j].getDataType();
+			if (dataType == AutoDataType::DataType::Double)
+			{
+				double val = 0;
+				testDatas[i].m_column_info_list[j].getData(val);
+				attrData.d4dot.w = val;
+				testDatas[i].m_column_info_list[stratCodeIndex].getData(attrData.strlayer);
+				mapSample[fldAttr].push_back(attrData);
+
+				//只记录一次成功取到数据的字段序号集合即可
+				if (i == 0)
+				{
+					vecSuccessNo.emplace_back(j);
+				}
+			}
+			else if (dataType == AutoDataType::DataType::Integer)
+			{
+				int val = 0;
+				testDatas[i].m_column_info_list[j].getData(val);
+				attrData.d4dot.w = val;
+				testDatas[i].m_column_info_list[stratCodeIndex].getData(attrData.strlayer);
+				mapSample[fldAttr].push_back(attrData);
+
+				//只记录一次成功取到数据的字段序号集合即可
+				if (i == 0)
+				{
+					vecSuccessNo.emplace_back(j);
+				}
+			}
+		}
+	}
+	for (auto iter = mapSample.begin(); iter != mapSample.end(); iter++)
+	{
+		std::string innerTbl = flds.tblName;
+		std::string innerFld = iter->first;
+		samples.push_back({ {innerTbl,innerFld},iter->second });
+	}
+	return true;
+}
+
+//根据深度求出地层编号
+std::string CAGeomodel::getStratCodeByDepth(const HoleInfo & hole, const double & depth)
+{
+	const std::vector<s3d_BoreHoleLayer>& holeLayers = hole.m_LayerList;//钻孔分层列表
+	for (int i = 0; i < holeLayers.size(); i++)
+	{
+		double topDepth = hole.m_dHoleTop - holeLayers.at(i).m_dTop;
+		double btmDepth = hole.m_dHoleTop - holeLayers.at(i).m_dBottom;
+		if (depth >= topDepth && depth <= btmDepth)
+		{
+			return holeLayers.at(i).m_stratCode;
+		}
+	}
+
+	return "";
+}
+
+//获取默认表名
+std::string CAGeomodel::getDefaultName(InnerName & tblFld)
+{
+	for (int i = 0; i < m_SelectFlds.size(); i++)
+	{
+		if (m_SelectFlds[i].tblName == tblFld.TblName)
+		{
+			for (int j = 0; j < m_SelectFlds[i].fldNames.size(); j++)
+			{
+				if (m_SelectFlds[i].fldNames[j].first == tblFld.FldName)
+				{
+					return m_SelectFlds[i].fldNames[j].second;
+				}
+			}
+		}
+	}
+	return "";
+}
+
+//选择实验表
+void CAGeomodel::SelectTestData()
+{
+	//实验数据改变-->改变属性参数列表
+	ui.comboBox_FieldPara->clear();
+	std::string tblName = ui.comboBox_TestData->currentData().toString().toLocal8Bit();
+	for (int i = 0; i < m_AllTblFlds.size(); i++)
+	{
+		if (m_AllTblFlds[i].tblName == tblName)
+		{
+			std::vector<std::pair<std::string, std::string>> flds = m_AllTblFlds[i].fldNames;
+			for (int j = 0; j < flds.size(); j++)
+			{
+				ui.comboBox_FieldPara->addItem(QString::fromLocal8Bit(flds[j].second.c_str()), QString::fromLocal8Bit(flds[j].first.c_str()));
+			}
+			break;
+		}
+	}
+	if (ui.comboBox_FieldPara->count() > 0)
+	{
+		ui.comboBox_FieldPara->setCurrentIndex(0);
+	}
+}
+
+
+//备份
+gmeGridModel* CAGeomodel::buildOctFieldModel(std::pair<InnerName, std::vector<attDataStru>>& samples, gme_rect_3d& box, std::string modelName)
+{
+	double dxSize = ui.lineEdit_X->text().toDouble();  //格网大小
+	double dySize = ui.lineEdit_Y->text().toDouble();
+	double dzSize = ui.lineEdit_Z->text().toDouble();
+
+	OgAppResLoadingIterator::getSingleton().editStatusCmd("栅格化中");
+
+	//属性数据分析
+	attAnalyCls analyCls;
+	int isLoadSampe = analyCls.loadSampleDots(samples.second);
+	if (isLoadSampe == 0)
+	{
+		return nullptr;
+	}
+
+	map<std::string, vector<gme_vector4d>> mapSampledots;
+	analyCls.GetAllLayerDatas(mapSampledots); //
+
+	//属性数据插值/属性建模参数
+	attMdlParam attParam;
+	attParam.dx = dxSize;
+	attParam.dy = dySize;
+	attParam.dz = dzSize;
+	attParam.attName = samples.first.FldName;
+
+
+	map<std::string, vector<gmeEntity*>> mapEntyModel;	//结构模型中的entity;
+	GetMapEntity(getCurrentModel(), mapEntyModel);
+
+	attCreateCls createCls;
+	createCls.setMdlParam(attParam);
+	createCls.loadSampleDatas(mapSampledots);
+	createCls.loadGeoEntity(mapEntyModel);
+	createCls.setMdlBox(box);
+	createCls.Create3dGridMdl();
+	createCls.Cal3dGridAttVal();
+	//string vtkpath = "G:/vtk/test01.vtk";
+	//string vtkpath = "G:/VTK_ColorTable/test01.vtk";
+	//选择存储位置
+	string vtkpath = SelectoutputPath(attParam.attName);
+
+	createCls.GeoAttMdl2VTK(vtkpath);//输出属性模型到csv/vtk文件
+	QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("成功保存到本地"));
+
+	gme_rect_3d mdl_box;
+	long x_num = 0, y_num = 0, z_num = 0;
+	gme_vector3d  xyz_gap, min_pnt, max_pnt;
+	vector<double>* pAttValues = NULL;
+	createCls.OutPutAttMdlDatas(&mdl_box, &x_num, &y_num, &z_num, &xyz_gap, &min_pnt, &max_pnt, &pAttValues);
+	OgAppResLoadingIterator::getSingleton().editStatusProg(60);
+
+	  // 预处理插值后的属性值
+	if (samples.first.TblName == TBL_LOADTEST_TBL && samples.first.FldName == TBL_LOADTEST_FLD_YSKYZ)
+	{ // 载荷试验成果表的“岩石抗压道（MPa）”属性需要处理
+		std::vector<std::string> strat_code_list;
+		createCls.getAttrValsCode(strat_code_list);//返回每个单元格对应的地层编码
+		std::map<std::string, gm_strat_type> strat_reference;
+		for (auto strat_it = m_strat_info_list.begin(); strat_it != m_strat_info_list.end(); ++strat_it)
+		{
+			strat_reference[strat_it->m_stratCode] = gm_strat_type(strat_it->m_stratType);
+		}
+		preProcess(*pAttValues, strat_code_list, strat_reference);
+	}
+
+	//构建属性模型
+	gme_vector3d localOrigin(mdl_box.min_x, mdl_box.min_y, mdl_box.min_z);
+	gmeLocalAxis localAxis(localOrigin, gme_radian_d(0), gme_radian_d(0)); //局部坐标系
+
+	gme_vector3d minPt = localAxis.GlobalToLocal(min_pnt);
+	gme_vector3d maxPt = localAxis.GlobalToLocal(max_pnt); //包围盒-全局转局部
+
+	gme_vector3d cellSize(xyz_gap.x, xyz_gap.y, xyz_gap.z);
+
+	gmeField field1(samples.first.FldName, gmeFieldValue::gmeType::Type_Real64);
+	field1.SetInvalidValue(to_string(invalid));
+	gmeFields schema;
+	schema.Append(field1);
+
+	gmeGridModel* pOctFieldGeom = new gmeGridModel(modelName, localAxis, maxPt, cellSize, schema);
+
+	const gme_vector3i&  dim = pOctFieldGeom->GetDimension();
+	long xSpan = dim.x;
+	long ySpan = dim.y;
+	long zSpan = dim.z;
+
+	if (pAttValues->size() == xSpan * ySpan * zSpan)
+	{
+		pOctFieldGeom->SetCellsValue(field1.GetName(), {0,0,0}, xSpan, ySpan, zSpan, &(*pAttValues)[0]);
+
+		OgAppResLoadingIterator::getSingleton().editStatusProg(80);
+
+		vector<double> breakVals;
+		AttBreaksSet(*pAttValues, breakVals);//计算间断点815
+		setOctFieldColor(pOctFieldGeom, breakVals);//设色
+
+		gmeGridModel* pAttrModel = buildOctFieldModel(pOctFieldGeom);
+
+		gmeGridModel::FieldColorMap fieldColor;
+		fieldColor = pOctFieldGeom->GetColorMap();
+
+		vector<gme_color4> colors;	//图例颜色
+		//i=0为无效值颜色，i=size-1为无意义的补充颜色
+		for (size_t i = 1; i < fieldColor.vFieldColors.size() - 1; i++)
+		{
+			colors.push_back(fieldColor.vFieldColors[i].second);
+		}
+
+		//
+		setOctFieldLegend(pAttrModel, breakVals, colors);//设置图例815
+
+		return pAttrModel;
+	}
+	return nullptr;
+}
+
+
+//oct
+gmeGridModel* CAGeomodel::buildOctFieldModel1(std::pair<InnerName, std::vector<attDataStru>>& samples, gme_rect_3d& box, std::string modelName)
+{
+	double dxSize = ui.lineEdit_X->text().toDouble();  //格网大小
+	double dySize = ui.lineEdit_Y->text().toDouble();
+	double dzSize = ui.lineEdit_Z->text().toDouble();
+
+	OgAppResLoadingIterator::getSingleton().editStatusCmd("栅格化中");
+
+	//属性数据分析
+	attAnalyCls analyCls;
+	int isLoadSampe = analyCls.loadSampleDots(samples.second);
+	if (isLoadSampe == 0)
+	{
+		return nullptr;
+	}
+
+	map<std::string, vector<gme_vector4d>> mapSampledots;
+	analyCls.GetAllLayerDatas(mapSampledots); //
+
+	//属性数据插值/属性建模参数
+	attMdlParam attParam;
+	attParam.dx = dxSize;
+	attParam.dy = dySize;
+	attParam.dz = dzSize;
+	attParam.attName = samples.first.FldName;
+	
+
+	map<std::string, vector<gmeEntity*>> mapEntyModel;	//结构模型中的entity;
+	GetMapEntity(getCurrentModel(), mapEntyModel); 
+
+	attCreateCls createCls;
+	createCls.setMdlParam(attParam);
+	createCls.loadSampleDatas(mapSampledots);
+	createCls.loadGeoEntity(mapEntyModel);
+	createCls.setMdlBox(box);
+	createCls.Create3dGridMdl();
+	createCls.Cal3dGridAttVal();
+	//string vtkpath = "G:/vtk/test01.vtk";
+	//string vtkpath = "G:/VTK_ColorTable/test01.vtk";
+	//选择存储位置
+	//string vtkpath = SelectoutputPath(attParam.attName);
+
+	//createCls.GeoAttMdl2VTK(vtkpath);//输出属性模型到csv/vtk文件
+	//QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("成功保存到本地"));
+
+	vector<double>* pAttValues = NULL;
+	createCls.OutPutAttMdlDatas(&mdl_box, &x_num, &y_num, &z_num, &xyz_gap, &min_pnt, &max_pnt, &pAttValues);
+	OgAppResLoadingIterator::getSingleton().editStatusProg(60);
+	//pAttValues = &CalWeight(pAttVaArr, fldsWeight, modelName);//9/29增
+	//增加处理，将pAttValues按照分级标准后再映射成1，2，3，4等整值
+	//求断点，返回新的pAttValues数组
+	//pAttValues->size() == xSpan * ySpan * zSpan，
+
+	  // 预处理插值后的属性值
+	if (samples.first.TblName == TBL_LOADTEST_TBL && samples.first.FldName == TBL_LOADTEST_FLD_YSKYZ)
+	{ // 载荷试验成果表的“岩石抗压道（MPa）”属性需要处理
+		std::vector<std::string> strat_code_list;
+		createCls.getAttrValsCode(strat_code_list);//返回每个单元格对应的地层编码
+		std::map<std::string, gm_strat_type> strat_reference;
+		for (auto strat_it = m_strat_info_list.begin(); strat_it != m_strat_info_list.end(); ++strat_it)
+		{
+			strat_reference[strat_it->m_stratCode] = gm_strat_type(strat_it->m_stratType);
+		}
+		preProcess(*pAttValues, strat_code_list, strat_reference);
+	}
+
+	//构建属性模型
+	gme_vector3d localOrigin(mdl_box.min_x, mdl_box.min_y, mdl_box.min_z);
+	gmeLocalAxis localAxis(localOrigin, gme_radian_d(0), gme_radian_d(0)); //局部坐标系
+
+	gme_vector3d minPt = localAxis.GlobalToLocal(min_pnt);
+	gme_vector3d maxPt = localAxis.GlobalToLocal(max_pnt); //包围盒-全局转局部
+
+	gme_vector3d cellSize(xyz_gap.x, xyz_gap.y, xyz_gap.z);
+
+	gmeField field1(samples.first.FldName, gmeFieldValue::gmeType::Type_Real64);
+	field1.SetInvalidValue(to_string(invalid));
+	gmeFields schema;
+	schema.Append(field1);
+
+	gmeGridModel* pOctFieldGeom = new gmeGridModel(modelName, localAxis, maxPt, cellSize, schema);
+
+	const gme_vector3i& dim = pOctFieldGeom->GetDimension();
+
+	long xSpan = dim.x;
+	long ySpan = dim.y;
+	long zSpan = dim.z;
+
+	if (pAttValues->size() == xSpan * ySpan * zSpan)
+	{
+		pOctFieldGeom->SetCellsValue(field1.GetName(), {0,0,0}, xSpan, ySpan, zSpan, &(*pAttValues)[0]);
+
+		OgAppResLoadingIterator::getSingleton().editStatusProg(80);
+		
+		
+		vector<double> breakVals;
+		AttBreaksSet(*pAttValues, breakVals);//计算间断点815
+	
+		//calweight()
+		//std::vector<std::vector<double>> m_selectArr;//暂存各属性值
+		//m_selectArr.emplace_back(pAttValues);//
+		//std::vector<vector<double>> w_breakVals;//暂存断点
+		//w_breakVals.emplace_back(breakVals);//
+		//std::vector<std::vector<double>> select_Weight;//暂存权重
+		//select_Weight.emplace_back(select_Weight);//
+		//调用calweight()函数进行遍历计算，数值，断点，权值叠加计算
+
+
+		setOctFieldColor(pOctFieldGeom, breakVals);//设色
+
+		gmeGridModel* pAttrModel = buildOctFieldModel(pOctFieldGeom);
+
+		gmeGridModel::FieldColorMap fieldColor;
+		fieldColor = pOctFieldGeom->GetColorMap();
+
+
+		vector<gme_color4> colors;	//图例颜色
+		//i=0为无效值颜色，i=size-1为无意义的补充颜色
+		for (size_t i = 1; i < fieldColor.vFieldColors.size() - 1; i++)
+		{
+			colors.push_back(fieldColor.vFieldColors[i].second);
+		}
+       
+		setOctFieldLegend(pAttrModel, breakVals, colors);//设置图例815
+
+		return pAttrModel;
+	}
+	return nullptr;
+}
+
+//预处理
+void CAGeomodel::preProcess(std::vector<double> &attr_list, const std::vector<std::string> &strat_code_list, const  std::map<std::string, gm_strat_type> &strat_reference)
+{
+	if (attr_list.size() != strat_code_list.size() || attr_list.empty())
+	{
+		return;
+	}
+	//// 得到有效值的范围，然后在该范围内确定整体最差值
+	//double min_value, max_value;
+	//min_value = max_value = attr_list[0];
+	//bool is_valid = false;
+	//for (int i = 0; i < attr_list.size(); ++i)
+	//{
+	//	is_valid = (fabs(attr_list[i] - invalid)>10e-6 && attr_list[i] > invalid);
+	//	if (!is_valid)
+	//	{
+	//		continue;
+	//	}
+	//	min_value > attr_list[i] ? (min_value = attr_list[i]) : 0;
+	//	max_value < attr_list[i] ? (max_value = attr_list[i]) : 0;
+	//	
+	//}
+	for (int i = 0; i < attr_list.size(); ++i)
+	{
+		auto found_key = strat_reference.find(strat_code_list[i]);
+		if (found_key == strat_reference.end())
+		{
+			// 对没找到编码的地层，不处理
+			continue;
+		}
+		switch (found_key->second)
+		{
+		case GM_STRAT_TYPE_NONE: // 地层编码没有的，也置为无效值。
+		case GM_STRAT_TYPE_STRAT:
+		case GM_STRAT_TYPE_STRAT_Q:
+		case GM_STRAT_TYPE_STRAT_BR:
+		case GM_STRAT_TYPE_STRAT_LENTICLE:
+		{
+			attr_list[i] = 0; // 设为很差值，而非无效值
+			break;
+		}
+		default:
+		{
+
+		}
+		}
+	}
+}
+
+//计算间断点
+void CAGeomodel::AttBreaksSet(vector<double>& sampless, vector<double>& breakVals)
+{
+	vector<double> samples;
+	for (int i = 0; i < sampless.size(); i++)
+	{
+		if (sampless[i] != invalid)
+		{
+			samples.push_back(sampless[i]);
+		}
+	}
+	//用系统函数
+	double maxtemp = samples[0];
+	for (int i = 1; i < samples.size(); i++) {
+		if (maxtemp< samples[i]) {
+			maxtemp = samples[i];
+		}
+	}
+
+	
+	int iLevelNum = ui.spinBox_LevelNum->text().toInt();  //分层设色级数
+	//int iLevelNum = 5;//815
+	int iMethodIndex = ui.comboBox_ClassMethod->currentIndex(); //分类方法
+
+	bool jenkIs = true;
+	switch (iMethodIndex)
+	{
+	case 0://自然断点法
+		jenkIs = JenksNaturalBreaks::NaturalClassifyBreaks(samples, iLevelNum + 1, 0, breakVals);
+		for (int i = 0; i < breakVals.size(); i++) {
+			if (i = breakVals.size() - 1) {
+				breakVals[i] = maxtemp;
+			}
+		}
+		/*int placindex=breakVals.size();
+		replace(breakVals.begin(), breakVals.end(), placindex, tempmax);
+		breakVals.end() = tempmax;*/
+		break;
+
+	case 1://相等间隔法
+		jenkIs = gm_statistic_algo::EqualSpacingGetBreaks(samples, iLevelNum + 1, 0, breakVals);
+		break;
+
+	case 2://分位数法
+		jenkIs = QuantileBreaks::QuantileGetBreaks(samples, iLevelNum + 1, 0, breakVals);
+		break;
+	default:
+		break;
+	}
+}
+
+//分类方法选择
+void CAGeomodel::ClassifyMethod(vector<attDataStru>& sampless)
+{
+	int iMethodNo = ui.comboBox_ClassMethod->currentIndex();
+	vector<double> samples;
+	for (int i = 0; i < sampless.size(); i++)
+	{
+		samples.push_back(sampless[i].d4dot.w);
+	}
+
+	if (!samples.empty())
+	{
+		ui.spinBox_LevelNum->setMaximum(samples.size());
+
+		double dAttValMax = *max_element(samples.begin(), samples.end());
+		double dAttValMin = *min_element(samples.begin(), samples.end());
+		switch (iMethodNo)
+		{
+		case 0:
+			break;
+		case 1:
+		{
+			//相等间隔
+			int iNum = (dAttValMax - dAttValMin) * 100;
+			if (iNum < 99)
+			{
+				ui.spinBox_LevelNum->setMaximum(iNum);
+				if (iNum < 5 || iNum < ui.spinBox_LevelNum->text().toInt())
+				{
+					ui.spinBox_LevelNum->setValue(iNum);
+				}
+			}
+			break;
+		}
+		case 2:
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+
+void CAGeomodel::GetClassMeth()
+{
+	//加入属性值分类方法 
+	ui.comboBox_ClassMethod->addItem(QStringLiteral("自然断点法"));
+	ui.comboBox_ClassMethod->addItem(QStringLiteral("等距法"));
+	ui.comboBox_ClassMethod->addItem(QStringLiteral("分位数"));
+	ui.comboBox_ClassMethod->setCurrentIndex(2);
+}
+
+//地层对应编号
+void CAGeomodel::getStratIdByCode(map<std::string, vector<gmeEntity*>>& ents, map<string, int>& basLayersVec)
+{
+	AttrDBMng::getSingletonPtr()->setCurDbConn(m_Con);
+	int stdId = m_StdStratId;
+	std::vector<Smart3dMap::hole_stdStratDesc> baseLayers;
+	std::vector<AttrDBMng::CONDITION_INFO> conds;
+	AttrDBMng::CONDITION_INFO cond = { AttrDBMng::STDSTRAT_ID, EQUAL,stdId };
+	conds.push_back(cond);
+	AttrDBMng::getSingletonPtr()->getSysStdStratDesc(baseLayers, &conds);
+	std::map <std::string, hole_stdStratDesc> mapStdLayers;
+	for (int i = 0; i < baseLayers.size(); i++)
+	{
+		mapStdLayers[baseLayers[i].m_stratCode] = baseLayers[i];
+	}
+
+	for (auto iter = ents.begin(); iter != ents.end(); iter++)
+	{
+		std::string code = iter->first;
+		if (mapStdLayers.find(code) != mapStdLayers.end())
+		{
+			basLayersVec[code] = mapStdLayers[code].ID;
+		}
+	}
+}
+
+//结构数据输出
+void  CAGeomodel::GeoStruMdl2Vtk()
+{
+	
+	gmeModel* pModel = getCurrentModel();
+	if (pModel == nullptr)
+	{
+		QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("请选择一个结构模型"), MB_OK);
+		return;
+	}
+
+	gme_rect_3d box;
+	pModel->GetBox(box);
+
+
+	map<std::string, vector<gmeEntity*>> m_mapEntyModel;	//结构模型中的entity;
+	GetMapEntity(getCurrentModel(), m_mapEntyModel);
+	map<string, int> basLayersVec; //标准地层对应的序号
+	getStratIdByCode(m_mapEntyModel, basLayersVec);
+
+
+	std::string strTmpPath = pModel->GetName();
+	if (strTmpPath.empty())
+	{
+		strTmpPath = "地质结构栅格模型";
+	}
+
+	strTmpPath = preProceessName(strTmpPath);
+
+	attMdlParam attParam;
+	attParam.dx = ui.lineEdit_X->text().toDouble();
+	attParam.dy = ui.lineEdit_Y->text().toDouble();
+	attParam.dz = ui.lineEdit_Z->text().toDouble();
+	//attParam.attName = strPath + "/" + strTmpPath + ".vtk";
+	string  strPath = SelectoutputPath(strTmpPath); //选择目录
+	attParam.attName = strPath;
+	OgAppResLoadingIterator::getSingleton().editStatusProg(40);
+	attCreateCls  pcreateCls;   //属性数据插值类
+	pcreateCls.setMdlParam(attParam);
+	pcreateCls.setMdlBox(box);
+	pcreateCls.loadGeoEntity(m_mapEntyModel);
+	pcreateCls.setStdStrat(basLayersVec); //标准地层对应序号
+	pcreateCls.geoStruMdl2VTK(attParam.attName); //导出保存
+	OgAppResLoadingIterator::getSingleton().editStatusProg(80);
+	OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+	std::string strName = "结构模型网格保存成功";
+	QMessageBox::information(this, QStringLiteral("提示"), QString::fromLocal8Bit(strName.c_str()));
+}
+
+
+//属性数据输出
+void CAGeomodel::OctFieldMdl2Vtk()
+{
+	
+	OgAppResLoadingIterator::getSingleton().editStatusProg(0);
+	std::string name = "";
+	
+	m_SelectFlds.clear();
+	TblFlds selectFld;
+	selectFld.tblName = ui.comboBox_TestData->currentData().toString().toLocal8Bit().data();
+	selectFld.tblNameC = ui.comboBox_TestData->currentText().toLocal8Bit().data();
+	std::string  fldName = ui.comboBox_FieldPara->currentData().toString().toLocal8Bit().data();
+	std::string fldNameC = ui.comboBox_FieldPara->currentText().toLocal8Bit().data();
+	if (fldName != "")
+	{
+		selectFld.fldNames.push_back({ fldName,fldNameC });
+		name = ui.lineEdit_MdlName->text().toLocal8Bit().data();
+		m_SelectFlds.push_back(selectFld);
+	}
+	gmeModel* model = getCurrentModel();
+	if (model == nullptr)
+	{
+		QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("未获取到结构模型数据！"));
+		return;
+	}
+	if (m_SelectFlds.empty())
+	{
+		QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("请选择字段！"));
+		return;
+	}
+
+
+	OgAppResLoadingIterator::getSingleton().editStatusCmd("属性建模中");
+	double dxSize = ui.lineEdit_X->text().toDouble();  //格网大小
+	double dySize = ui.lineEdit_Y->text().toDouble();
+	double dzSize = ui.lineEdit_Z->text().toDouble();
+
+	gme_rect_3d box;
+	model->GetBox(box);
+	std::vector<gme_vector2d> vecpolygon;
+	vecpolygon.push_back({ box.xmin,box.ymin });
+	vecpolygon.push_back({ box.xmax,box.ymin });
+	vecpolygon.push_back({ box.xmax,box.ymax });
+	vecpolygon.push_back({ box.xmin,box.ymax });
+	vecpolygon.push_back({ box.xmin,box.ymin });
+
+	map<std::string, vector<gmeEntity*>> mapEntyModel;			//结构模型中的entity;
+	GetMapEntity(getCurrentModel(), mapEntyModel);
+
+	std::vector<std::pair<InnerName, std::vector<attDataStru>>> samples;
+	std::vector<int> vecSuccessNo;
+
+	for (int i = 0; i < m_SelectFlds.size(); i++)
+	{
+
+		OgAppResLoadingIterator::getSingleton().editStatusProg(20);
+
+		samples.clear();
+		vecSuccessNo.clear();
+		GetSampleData(m_SelectFlds[i], vecpolygon, samples, vecSuccessNo);
+
+		OgAppResLoadingIterator::getSingleton().editStatusProg(40);
+		for (int j = 0; j < samples.size(); j++)
+		{
+			attAnalyCls analyCls;
+			int isLoadSampe = analyCls.loadSampleDots(samples[j].second);
+			if (isLoadSampe == 0)
+			{
+				continue;
+			}
+
+			map<std::string, vector<gme_vector4d>> mapSampledots;
+			analyCls.GetAllLayerDatas(mapSampledots);
+
+			//属性数据插值
+			attMdlParam attParam;
+			attParam.dx = dxSize;
+			attParam.dy = dySize;
+			attParam.dz = dzSize;
+			attParam.attName = samples[j].first.FldName;
+
+			attCreateCls createCls;
+			createCls.setMdlParam(attParam);
+			createCls.loadSampleDatas(mapSampledots);
+
+			createCls.loadGeoEntity(mapEntyModel);
+			createCls.setMdlBox(box);
+			createCls.Create3dGridMdl();
+			createCls.Cal3dGridAttVal();
+			OgAppResLoadingIterator::getSingleton().editStatusProg(60);
+
+			std::string strTmpFldName = m_SelectFlds[i].fldNames[vecSuccessNo[j]].second;
+			strTmpFldName = preProceessName(strTmpFldName);
+
+			//std::string strFilePath = strPath + "/属性模型网格_" + strTmpFldName + ".vtk";
+			string  strPath = SelectoutputPath(strTmpFldName);
+			createCls.GeoAttMdl2VTK(strPath);
+			//OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+		}
+	}
+	OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+	std::string strName = "属性模型网格保存成功";
+	QMessageBox::information(this, QStringLiteral("提示"), QString::fromLocal8Bit(strName.c_str()));
+}
+
+//去除非法字符名
+std::string CAGeomodel::preProceessName(std::string name)
+{
+	std::string strFldName = "";
+	//属性字段名的处理：去除单位，如(m/s),去除/或\\符号
+	std::vector<string> vecSplits = OC::StringUtil::split(name, "(");
+	if (!vecSplits.empty())
+	{
+		strFldName = vecSplits[0];
+	}
+
+	//避免文件名中含有/ 或是\\，导致文件生成失败
+	_Replace_Str(strFldName, "/", "");
+	_Replace_Str(strFldName, "\\", "");
+	return strFldName;
+}
+
+
+//选择属性模型和结构模型vtk存储文件夹
+std::string CAGeomodel::SelectoutputPath(std::string vtkname)
+{
+		QString fileName = QFileDialog::getExistingDirectory(this, QStringLiteral("选择存储属性模型文件夹路径"), "", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+		if (!fileName.isEmpty())
+		{
+			ui.lineEdit_ExportPath->setText(fileName);
+		}
+		string  vtkpath= string(fileName.toLocal8Bit()) + "/" + vtkname + ".vtk";//解决中文路径问题 
+		      return vtkpath;
+}
+
+
+//设置图例
+void CAGeomodel::setOctFieldLegend(gmeGridModel * model, vector<double>& breakVals, vector<gme_color4>& colors)
+{
+	if (model == nullptr)
+	{
+		return;
+	}
+
+	std::string strLegendName = model->GetName();
+	std::vector<std::string> vecSplits = OC::StringUtil::split(strLegendName, "_");
+	int iSplitsNum = vecSplits.size();
+	if (iSplitsNum > 1)
+	{
+		strLegendName = vecSplits[iSplitsNum - 1];
+	}
+
+	//添加图例
+	if (breakVals.size() == colors.size())
+	{
+		AttachStripLegend(model, breakVals, colors, strLegendName);
+	}
+	else
+	{
+		AttachBlockLegend(model, breakVals, colors, strLegendName);
+	}
+}
+
+
+//条带状图例
+void CAGeomodel::AttachStripLegend(gmeGridModel *pOctFieldMdl, vector<double> vBreaks, vector<gme_color4> vCols, string strLegendName)
+{
+	if (vBreaks.empty() || vCols.empty() || (vBreaks.size() != vCols.size()))
+	{
+		return;
+	}
+
+	vector<string> stratCode;
+	vector<string> stratName;
+	vector<string> materialName;
+	GME_LEGEND_TYPE legendType = GME_LT_COLORTBL;
+
+	double dPreValue = 0.0;
+	long   lStratClr = 0;
+
+	for (size_t i = 0; i < vBreaks.size(); i++)
+	{
+		dPreValue = vBreaks[i];
+		lStratClr = vCols[i].r + vCols[i].g * 256 + vCols[i].b * 256 * 256;
+
+		string attCode = DoubleToString(dPreValue);
+		string attName = "";
+		string clrName = _getClrMatName(lStratClr);
+
+		stratCode.push_back(attCode);
+		stratName.push_back(attName);
+		materialName.push_back(clrName);
+	}
+
+	pOctFieldMdl->GetLegend().SetName(strLegendName);
+
+	S3dAppRender3D::cvtStandardCode2GmeLegend(&pOctFieldMdl->GetLegend(), legendType, stratCode, stratName, materialName);
+}
+
+//块状图例
+void CAGeomodel::AttachBlockLegend(gmeGridModel *pOctFieldMdl, vector<double> vBreaks, vector<gme_color4> vCols, string strLegendName)
+{
+	if (vBreaks.empty() || vCols.empty())
+	{
+		return;
+	}
+
+	vector<string> stratCode;
+	vector<string> stratName;
+	vector<string> materialName;
+	GME_LEGEND_TYPE legendType = GME_LT_COLOR;
+
+	double dPreValue = 0.0;
+	double dNextValue = 0.0;
+	long   lStratClr = 0;
+	int	   index = 0;
+
+	for (size_t i = 0; i < vBreaks.size() - 1; i++)
+	{
+		if (i == 0)
+		{
+			dPreValue = vBreaks[i];
+		}
+		else
+		{
+			dPreValue = vBreaks[i] + 0.01;
+		}
+
+		dNextValue = vBreaks[i + 1];
+		lStratClr = vCols[index].r + vCols[index].g * 256 + vCols[index].b * 256 * 256;
+
+		index++;
+		string attCode = DoubleToString(dPreValue) + "～" + DoubleToString(dNextValue);
+		string attName = " " + std::to_string(index) + "级" +"占比为："+ DoubleToString(PerVolume[i]) + "%";
+		string clrName = _getClrMatName(lStratClr);
+
+		stratCode.push_back(attCode);
+		stratName.push_back(attName);
+		materialName.push_back(clrName);
+	}
+
+	PerVolume.clear();
+	reverseVec(stratCode);
+	reverseVec(stratName);
+	reverseVec(materialName);
+
+	pOctFieldMdl->GetLegend().SetName(strLegendName);
+
+	S3dAppRender3D::cvtStandardCode2GmeLegend(&pOctFieldMdl->GetLegend(), legendType, stratCode, stratName, materialName);
+}
+
+
+//取反
+long CAGeomodel::reverseVec(vector<string>&vec)
+{
+	if (vec.size() <= 0)
+		return 0;
+	vector<string>::iterator iter = vec.begin();
+	vector<string>::iterator riter = vec.end();
+	for (; iter != riter; iter++)
+	{
+		riter--;
+		if (iter == riter)
+			return 1;
+		string tmp = *iter;
+		*iter = *riter;
+		*riter = tmp;
+	}
+	return 1;
+}
+
+
+//根据色带和属性值得到颜色
+gme_color4 CAGeomodel::getGmeColor4(double val, gmeGridModel::FieldColorMap& colorMap)
+{
+	gme_color4 gmColor;
+	gmeGridModel::GME_COLOR_TYPE clrType = colorMap.fieldColorType;
+	vector<std::pair<double, gme_color4>>& colorVec = colorMap.vFieldColors;
+	if (clrType == gmeGridModel::GME_COLOR_TYPE::GME_CL_DISCRETE)
+	{
+		for (int i = 0; i < colorVec.size() - 1; i++)
+		{
+			std::pair<double, gme_color4>& color1 = colorVec[i];
+			std::pair<double, gme_color4>& color2 = colorVec[i + 1];
+			if (val >= color1.first && val < color2.first)
+			{
+				gmColor = colorVec[i].second;
+				return gmColor;
+			}
+		}
+	}
+	else if (clrType == gmeGridModel::GME_COLOR_TYPE::GME_CL_CONTINUE)
+	{
+		for (int i = 0; i < colorVec.size(); i++)
+		{
+			std::pair<double, gme_color4>& color = colorVec[i];
+			if (fabs(color.first - val) <= 1e-5)
+			{
+				gmColor = colorVec[i].second;
+				return gmColor;
+			}
+		}
+	}
+	return gmColor;
+}
+
+
+//
+void CAGeomodel::setOctFieldColor(gmeGridModel * octFieldGeom, vector<double>& breakVals)
+{
+	//计算间断点
+	vector<gme_color4>	vecColors;
+	int iLevelNum = ui.spinBox_LevelNum->text().toInt();  //模型渲染级数
+	GetColorEvenlyByQgsColorRamp(iLevelNum, ui.toolButton_ClrBanding, vecColors);
+
+	//色带
+	gmeGridModel::FieldColorMap fieldColor;
+	fieldColor.fieldColorType = gmeGridModel::GME_COLOR_TYPE::GME_CL_DISCRETE;
+
+	std::pair<double, gme_color4> invalidCol;
+	invalidCol.first = invalid;
+	invalidCol.second = gme_color4(1.0, 1.0, 1.0, 0.0);
+	fieldColor.vFieldColors.emplace_back(invalidCol);
+
+	int iBreakNum = breakVals.size();
+
+	if (iBreakNum == vecColors.size() + 1)
+	{
+		vecColors.emplace_back(0.0, 0.0, 0.0, 1.0);  //black --- 补充颜色，无实用
+	}
+	if (iBreakNum == vecColors.size())
+	{
+		for (int i = 0; i < iBreakNum; i++)
+		{
+			std::pair<double, gme_color4> ValColor;
+
+			if (i == iBreakNum - 1)
+			{
+				ValColor.first = breakVals.at(i) + 1;
+			}
+			else
+			{
+				ValColor.first = breakVals.at(i);
+			}
+
+			ValColor.second = vecColors.at(i);
+			fieldColor.vFieldColors.push_back(ValColor);
+		}
+	}
+
+	octFieldGeom->SetColorMap(fieldColor);
+	m_gme_field_color = fieldColor; // 暂存色带值
+	m_break_vals = breakVals; // 暂存分段
+	//增加数组，保存各属性断点值以及色带值
+
+}
+
+//色带颜色获取--根据级别均分色带
+void CAGeomodel::GetColorEvenlyByQgsColorRamp(int iLevelNo, QgsColorRampButton *toolButton_ClrBanding, vector<gme_color4>& vCols)
+{
+	vCols.clear();
+
+	gme_color4 clr;
+	QgsColorRamp *pRamp = toolButton_ClrBanding->colorRamp();
+	if (pRamp == NULL)
+	{
+		return;
+	}
+
+	int iTmpLevelNo = iLevelNo - 1;
+	for (int index = 0; index < iLevelNo; index++)
+	{
+		QColor qclr;
+		if (iLevelNo == 1)
+			qclr = pRamp->color(0);
+		else
+			qclr = pRamp->color((double)index / iTmpLevelNo);
+
+		clr.r = qclr.red();
+		clr.g = qclr.green();
+		clr.b = qclr.blue();
+		clr.a = qclr.alpha();
+
+		vCols.push_back(clr);
+	}
+}
+
+//构建色表
+bool CAGeomodel::CreateColorTab(vector<double> vecBreaks, vector<gme_color4> vecCols, int iDiscrete, string& colorTab)
+{
+	if (vecBreaks.empty() || vecCols.empty())
+	{
+		return false;
+	}
+	if (vecCols.size() != vecBreaks.size())
+	{
+		if (vecCols.size() != vecBreaks.size() - 1)
+		{
+			return false;
+		}
+	}
+
+	osgDB::ofstream ofstrFile;
+	ofstrFile.open(colorTab.c_str(), std::ios::out);
+	if (!ofstrFile.is_open())
+		return false;
+
+	//写入文件版本及色表对应数量
+	std::string str = "ColorMap 2.0";
+	ofstrFile << str << std::endl;
+	ofstrFile << vecBreaks.size() + 1 << std::endl;
+
+	ofstrFile << -999999;
+	ofstrFile << " ";
+	ofstrFile << 1.0;
+	ofstrFile << " ";
+	ofstrFile << 1.0;
+	ofstrFile << " ";
+	ofstrFile << 1.0;
+	ofstrFile << " ";
+	ofstrFile << 0; //无效值透明
+	ofstrFile << " ";
+	ofstrFile << std::endl;
+
+	if (iDiscrete == 0)
+	{
+		for (size_t i = 0; i < vecBreaks.size(); i++)
+		{
+			ofstrFile << vecBreaks[i];
+			ofstrFile << " ";
+			ofstrFile << vecCols[i].r;
+			ofstrFile << " ";
+			ofstrFile << vecCols[i].g;
+			ofstrFile << " ";
+			ofstrFile << vecCols[i].b;
+			ofstrFile << " ";
+			ofstrFile << vecCols[i].a;
+			ofstrFile << " ";
+			ofstrFile << std::endl;
+		}
+	}
+	else
+	{
+		for (size_t i = 0, j = 0; i < vecBreaks.size() - 1 && j < vecCols.size(); i++, j++)
+		{
+			if (i == 0)
+			{
+				ofstrFile << vecBreaks[i];
+			}
+			else
+			{
+				ofstrFile << vecBreaks[i] + 0.01;
+			}
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].r;
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].g;
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].b;
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].a;
+			ofstrFile << " ";
+			ofstrFile << std::endl;
+
+			ofstrFile << vecBreaks[i + 1];
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].r;
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].g;
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].b;
+			ofstrFile << " ";
+			ofstrFile << vecCols[j].a;
+			ofstrFile << " ";
+			ofstrFile << std::endl;
+		}
+	}
+
+	//写入当前保存时间 年-月-日  小时:分钟:秒
+	time_t timep;
+	time(&timep); /*获得time_t结构的时间，UTC时间*/
+	struct tm* p = localtime(&timep); /*转换为struct tm结构的当地时间*/
+
+	string strFormat = "%Y-%m-%d  %H:%M:%S";  //自定义格式
+	char cTimeStr[255] = "\0";  //strftime 第一个参数是 char* 
+	strftime(cTimeStr, sizeof(cTimeStr), strFormat.c_str(), p);
+
+	ofstrFile << cTimeStr << std::endl;
+
+	ofstrFile.close();
+
+	return true;
+}
+
+
+//批量选择
+void CAGeomodel::BatchSelectComply()
+{
+	if (ui.checkBox_BatchSelect->isChecked())
+	{
+		int iTabNo = ui.comboBox_TestData->currentIndex();
+
+		//批量选择界面
+		FieldBatchSelectDialog batchSelectDlg;
+		std::vector<std::string> vecInTabNameC;
+		std::vector<std::vector<std::string>> vvecInFldNameC;
+		for (int i = 0; i < m_AllTblFlds.size(); i++)
+		{
+			TblFlds& tblFlds = m_AllTblFlds[i];
+			vecInTabNameC.push_back(tblFlds.tblNameC);
+			std::vector<std::string> InFldNameC;
+			for (int j = 0; j < tblFlds.fldNames.size(); j++)
+			{
+				InFldNameC.push_back(tblFlds.fldNames[j].second);
+			}
+			vvecInFldNameC.push_back(InFldNameC);
+		}
+		//传入所有表名和字段名
+		batchSelectDlg.ReceiveInitData(iTabNo, vecInTabNameC, vvecInFldNameC);
+
+		if (batchSelectDlg.exec() != QDialog::Accepted)
+		{
+			ui.checkBox_BatchSelect->setChecked(false);
+			return;
+		}
+
+		//主界面实验数据、属性数据不可选
+		ui.comboBox_TestData->setEnabled(false);
+		ui.comboBox_FieldPara->setEnabled(false);
+
+		std::map<int, std::vector<int>> mapTabAddFldNo = batchSelectDlg.GetCurTabAddFld();
+		//取出选择的所有表名和字段名
+		m_SelectFlds.clear();
+
+		for (auto iter = mapTabAddFldNo.begin(); iter != mapTabAddFldNo.end(); iter++)
+		{
+			TblFlds selectFlds;
+			TblFlds tblFlds = m_AllTblFlds[iter->first];
+			selectFlds.tblName = tblFlds.tblName;
+			selectFlds.tblNameC = tblFlds.tblNameC;
+              
+			for (int j = 0; j < iter->second.size(); j++)
+			{
+				selectFlds.fldNames.push_back(tblFlds.fldNames[iter->second[j]]);
+			}
+			m_SelectFlds.push_back(selectFlds);
+		}
+
+		ui.lineEdit_MdlName->setText(QStringLiteral("三维评价模型"));
+	    reatfun();
+		ShowTable();
+	}
+	else
+	{
+		ui.comboBox_TestData->setEnabled(true);
+		ui.comboBox_FieldPara->setEnabled(true);
+
+		SetMdlName();
+		stdTable->clear();
+
+	}
+	
+}
+
+//权值叠加计算
+std::vector<double> CAGeomodel::CalWeight(std::vector<vector<double>> pAttVaArr, std::vector<double> fldsWeight, std::string modelName) {
+	     vector<double> CalWeightResult;
+		 vector<double> NewCalist;
+		 double casum;
+	for (int i = 0; i < pAttVaArr.size(); i++) {
+		vector<double> patemp1 = pAttVaArr[i];
+		for (int j = 0; j < patemp1.size(); j++) {
+			casum = patemp1[j] * fldsWeight[i];
+			if (patemp1[j] == invalid) {
+				casum = 0;
+			}
+			if (i==0) {
+				CalWeightResult.push_back(casum);
+			}
+			else {
+				CalWeightResult[j] = CalWeightResult[j] + casum;
+			}
+		}
+	}
+	      NewCalist = DeterInvalid(CalWeightResult);
+	      return   NewCalist;//
+}
+//叠加计算
+void  CAGeomodel::CalWeight(std::vector<std::vector<double>> CalArr, vector<double> Weight, gmeGridModel* w_OctFieldGeom, std::vector<vector<double>> w_breakVals) {
+	for (int i = 0; i < CalArr.size(); i++) {//拿出数组，外圈为表，内圈为属性字段，再内圈为数值
+		//此处拿出的部分可以对同一评价方面的属性进行权值匹配和段点计算
+		//此处区分出断点及权值部分的编号
+		for (int j = 0; j < CalArr[i].size();j++) {//拿出数值
+			//声明个变量暂存求出的数值
+			std::vector<double> CalResults;
+			double temp = 0;
+			//temp= CalArr[i][j]*
+
+
+		}
+
+	}
+
+}
+
+void  CAGeomodel::WriteWeight(std::vector<std::vector<MappingRange>> m_MapRange, std::vector<double>  a_allweight) {
+
+
+}
+
+
+//得到权值叠加后的值/暂不用
+void CAGeomodel::CalWeightResult(std::vector<std::vector<MappingRange>> all_mapRange) {
+	std::vector<std::vector<MappingRange>> new_mapRange;
+	vector<MappingRange> new_maplist;
+	MappingRange maptemp;
+	double thweight;
+	double newvalue;
+	for (int i = 0; i < all_mapRange.size(); i++) { //单
+		for (int j = 0; j < all_mapRange[i].size(); j++) {
+			maptemp  = all_mapRange[i][j];
+			thweight = fldsWeight[i];  //权值
+			newvalue = maptemp.RangeIndex;//新值
+		}
+		new_maplist.push_back(maptemp);
+	}
+	 new_mapRange.push_back(new_maplist);
+}
+
+//准备/预先取得断点
+void CAGeomodel::reatfun() {
+	bool isBatchSelect = ui.checkBox_BatchSelect->isChecked();
+	std::string name = "";
+	if (!isBatchSelect)
+	{
+		m_SelectFlds.clear();
+		TblFlds selectFld;
+		selectFld.tblName = ui.comboBox_TestData->currentData().toString().toLocal8Bit().data();
+		selectFld.tblNameC = ui.comboBox_TestData->currentText().toLocal8Bit().data();
+		std::string  fldName = ui.comboBox_FieldPara->currentData().toString().toLocal8Bit().data();
+		std::string fldNameC = ui.comboBox_FieldPara->currentText().toLocal8Bit().data();
+		if (fldName != "")
+		{
+			selectFld.fldNames.push_back({ fldName,fldNameC });
+			name = ui.lineEdit_MdlName->text().toLocal8Bit().data();
+			m_SelectFlds.push_back(selectFld);
+		}
+       //增加显示
+
+	}
+	gmeModel* model = getCurrentModel();
+	if (model == nullptr)
+	{
+		QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("未获取到结构模型数据！"));
+		return;
+	}
+	if (m_SelectFlds.empty())
+	{
+		QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("请选择字段！"));
+		return;
+	}
+
+	gme_rect_3d box;
+	model->GetBox(box);
+
+	std::vector<gme_vector2d> vecpolygon;
+	vecpolygon.push_back({ box.xmin,box.ymin });
+	vecpolygon.push_back({ box.xmax,box.ymin });
+	vecpolygon.push_back({ box.xmax,box.ymax });
+	vecpolygon.push_back({ box.xmin,box.ymax });
+	vecpolygon.push_back({ box.xmin,box.ymin });
+
+	int count = 0;
+
+	std::vector<std::pair<InnerName, std::vector<attDataStru>>> samples;
+	std::vector<int> vecSuccessNo;
+
+	for (int i = 0; i < m_SelectFlds.size(); i++)
+	{
+		samples.clear();
+		vecSuccessNo.clear();
+		GetSampleData(m_SelectFlds[i], vecpolygon, samples, vecSuccessNo);//得到各属性samples样本值
+
+		for (int j = 0; j < samples.size(); j++)
+		{
+			//name = "属性模型_" + getDefaultName(samples[j].first);
+
+			//if (isBatchSelect) {
+				name = ui.lineEdit_MdlName->text().toLocal8Bit().data();//多属性评价模型名/用户输入
+				CalbreakVals(samples[j], box, name);
+			//}
+		}
+	}
+}
+
+
+
+//计算断点
+void CAGeomodel::CalbreakVals(std::pair<InnerName, std::vector<attDataStru>>& samples, gme_rect_3d& box, std::string modelName) {
+
+	double dxSize = ui.lineEdit_X->text().toDouble();  //格网大小
+	double dySize = ui.lineEdit_Y->text().toDouble();
+	double dzSize = ui.lineEdit_Z->text().toDouble();
+
+	//属性数据分析
+	attAnalyCls analyCls;
+	int isLoadSampe = analyCls.loadSampleDots(samples.second);
+	if (isLoadSampe == 0)
+	{
+		return;
+	}
+
+	map<std::string, vector<gme_vector4d>> mapSampledots;
+	analyCls.GetAllLayerDatas(mapSampledots); //获取地层对应的样本数据
+
+	//属性数据插值/属性建模参数
+	attMdlParam attParam;
+	attParam.dx = dxSize;
+	attParam.dy = dySize;
+	attParam.dz = dzSize;
+	//attParam.attName = samples.first.FldName;//名字可忽略
+	attParam.attName=modelName;//最好取自定义名，便于修改
+
+
+	map<std::string, vector<gmeEntity*>> mapEntyModel;	//结构模型中的entity;
+	GetMapEntity(getCurrentModel(), mapEntyModel);
+
+	attCreateCls createCls;
+	createCls.setMdlParam(attParam);
+	createCls.loadSampleDatas(mapSampledots);
+	createCls.loadGeoEntity(mapEntyModel);
+	createCls.setMdlBox(box);
+	createCls.Create3dGridMdl();
+	createCls.Cal3dGridAttVal();
+	//选择存储位置
+	//string vtkpath = SelectoutputPath(attParam.attName);
+	//createCls.GeoAttMdl2VTK(vtkpath);//输出属性模型到csv/vtk文件
+	//QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("成功保存到本地"));
+
+	/*gme_rect_3d mdl_box;
+	long x_num = 0, y_num = 0, z_num = 0;
+	gme_vector3d  xyz_gap, min_pnt, max_pnt;*/
+	vector<double>* pAttValues = NULL;
+	createCls.OutPutAttMdlDatas(&mdl_box, &x_num, &y_num, &z_num, &xyz_gap, &min_pnt, &max_pnt, &pAttValues);
+
+	  // 预处理插值后的属性值
+	if (samples.first.TblName == TBL_LOADTEST_TBL && samples.first.FldName == TBL_LOADTEST_FLD_YSKYZ)
+	{ // 载荷试验成果表的“岩石抗压道（MPa）”属性需要处理
+		std::vector<std::string> strat_code_list;
+		createCls.getAttrValsCode(strat_code_list);//返回每个单元格对应的地层编码
+		std::map<std::string, gm_strat_type> strat_reference;
+		for (auto strat_it = m_strat_info_list.begin(); strat_it != m_strat_info_list.end(); ++strat_it)
+		{
+			strat_reference[strat_it->m_stratCode] = gm_strat_type(strat_it->m_stratType);
+		}
+		preProcess(*pAttValues, strat_code_list, strat_reference);
+	}
+	    //计算间断点
+		std::vector<double> breakVals;
+		pAttVaArr.push_back(*pAttValues);  //暂存
+		AttBreaksSet(*pAttValues, breakVals);//计算间断点
+		  
+		//改
+		MappingRange mappindex;
+		mappindex.breakpot = breakVals;
+
+		//	//此处添加函数，得到各属性值数组
+		//	//遍历数组，得到断点值
+		//	//设置权重
+		//	mappindex.RangeIndex = i + 1; // 1,2,3
+		//	mappindex.NewRanges.push_back({ dPreValue ,dNextValue });
+		//	mappindex.Newbreaks.push_back(dPreValue);//断点值
+		//	mappindex.inweight = 0;// 从ui界面获取到值
+		//	MapRange.push_back(mappindex);//
+		//	mappindex.NewRanges.clear(); //将前部分缓存删除
+		//	mappindex.Newbreaks.clear();//置空
+		//	//得到属性结构体数组
+		//}
+		//MapRange;//得到值
+		MapRange.push_back(mappindex);
+		m_MapRange.push_back(MapRange); //所选值  //增加函数写入权
+		MapRange.clear();
+		pAttValues->clear();
+		//CalWeightResult(m_MapRange);
+}
+
+
+//表格显示、编辑
+void CAGeomodel::ShowTable(){
+	stdTable = new QStandardItemModel(this);//显示表格
+	stdTable->setColumnCount(8);
+	ui.tableView_show->setModel(stdTable);
+	ui.tableView_show->resizeColumnsToContents(); //自适应宽度
+	int breakcol;//断点数目，区间列数
+
+	//分段数据展示列数据准备
+	vector<MappingRange> maptemp;
+	MappingRange mapinclude;
+	std::vector<double> breakArr; //单属性断点
+	int breaksize;
+	std::vector<std::vector<double>> allbreaks;
+	//得到多断点数组组成的数组；
+	for (int m = 0; m < m_MapRange.size(); m++) {
+		maptemp = m_MapRange[m]; //单数据结构
+		for (int n = 0; n < maptemp.size(); n++) {
+			mapinclude = maptemp[n]; //解析数据
+			int breakssize = mapinclude.breakpot.size();  //单属性断点
+			for (int s = 0; s < breakssize; s++) {   //记录下断点暂存
+				double tempoots = mapinclude.breakpot[s];
+				breakArr.push_back(tempoots);
+			}
+			allbreaks.push_back(breakArr);
+			breaksize = breakArr.size();
+			breakArr.clear();
+		}
+	}
+	m_MapRange.clear();
+   //行数即因子数
+	int rownum = allbreaks.size();
+	stdTable->clear();
+	stdTable->setHorizontalHeaderItem(0, new QStandardItem(QStringLiteral("因子名称")));
+	stdTable->setHorizontalHeaderItem(1, new QStandardItem(QStringLiteral("因子权重")));
+	for (int i = 2; i < breaksize+2; i++) {
+		stdTable->setHorizontalHeaderItem(i, new QStandardItem(QStringLiteral("区间")));
+	}
+
+	std::vector<string> fnameArr;
+	for (int i = 0; i < m_SelectFlds.size(); i++) {
+		TblFlds tbltemp = m_SelectFlds[i];
+		for (int j = 0; j < tbltemp.fldNames.size(); j++) {
+			string fname = tbltemp.fldNames[j].second;
+			fnameArr.push_back(fname);	
+		}
+	}//首列
+	for (int na = 0; na < fnameArr.size();na++) {
+		string relname = fnameArr[na];
+		stdTable->setItem(na, 0, new QStandardItem(QString::fromLocal8Bit(relname.c_str())));
+		
+		stdTable->setItem(na, 1, new QStandardItem(QString::fromLocal8Bit("0")));
+	}
+	    fnameArr.clear();
+		for (int i = 0; i < allbreaks.size(); i++){
+			breakArr = allbreaks[i];
+			breakcol = breakArr.size();
+			for (int j = 0; j < breakcol; j++) {
+				double potvalue = breakArr[j];
+				string potva = DoubleToString(potvalue);
+	       stdTable->setItem(i, j+2, new QStandardItem(QString::fromLocal8Bit(potva.c_str())));
+
+			}
+	    }
+   //设置只读不能编辑
+		//ReadOnlyDelegate* readOnlyDelegate = new ReadOnlyDelegate();
+		ui.tableView_show->setItemDelegateForColumn(2, new ReadOnlyDelegate(this)); //设置某列只读
+		ui.tableView_show->setItemDelegateForColumn(breakcol+1, new ReadOnlyDelegate(this));
+
+}
+
+void CAGeomodel::onOKclicked()
+{
+	//权值
+	int rowcount = stdTable->rowCount();//行
+	int colcount = stdTable->columnCount();//列
+	fldsWeight.clear();
+	double sum = 0;
+	for (int i = 0; i < rowcount; i++)
+	{
+		fldsWeight.push_back(stdTable->data(stdTable->index(i, 1)).toDouble());
+		sum += stdTable->data(stdTable->index(i, 1)).toDouble();
+	}
+
+	if (sum != 1)
+	{
+		QMessageBox::critical(NULL, QStringLiteral("警告"), QStringLiteral("因子权重和不为1，请重新输入"));
+		return;
+	}
+
+	//断点判断
+	std::vector<double> breakpot;
+	breakpot.clear();
+	for (int j = 0; j < rowcount; j++) {
+		for (int i = 2; i < colcount; i++) {
+			breakpot.push_back(stdTable->data(stdTable->index(j, i)).toDouble());
+		}
+			breakpots.push_back(breakpot);
+			breakpot.clear();
+	}
+
+	//升序判断
+	int breaknum = breakpots.size();
+	for (int i = 0; i < breaknum;i++){//因子数
+		vector<double> breaktemps;
+		breaktemps = breakpots[i];
+		int ktemps = breaktemps.size();
+		for (int j = 0; j < ktemps-1; j++) {
+			if (breaktemps[j] < breaktemps[j + 1])
+				continue;
+			else
+			QMessageBox::critical(NULL, QStringLiteral("警告"), QStringLiteral("区间范围不合，请重新输入"));
+			return;
+		}
+
+	}
+		 breakpots.clear(); //此处置空便于测试，最后作为最终的断点数组
+}
+
+
+void CAGeomodel::visualEvaluationModel(gmeGridModel* octFieldModel,std::string name) {
+	Smart3dMap::Container * pContaienr = S3dm3dRenderRegister::cvtGmeGridModel23dLayer(octFieldModel);
+	if (pContaienr)
+	{
+		pContaienr->setDisplayName(name);
+		pContaienr->setVisible(true);
+	}
+
+	OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+	//置空
+	pAttVaArr.clear();
+	//m_MapRange.clear();
+	std::string str = "完成" + name + "模型构建！";
+	QMessageBox::information(this, QStringLiteral("提示"), QString::fromLocal8Bit(str.c_str()));
+
+}
+
+//权值计算结果
+void CAGeomodel::buildNewOct(vector<double> *pAttValues,std::string modelName) {
+	
+	//构建属性模型
+	gme_vector3d localOrigin(mdl_box.min_x, mdl_box.min_y, mdl_box.min_z);
+	gmeLocalAxis localAxis(localOrigin, gme_radian_d(0), gme_radian_d(0)); //局部坐标系
+
+	gme_vector3d minPt = localAxis.GlobalToLocal(min_pnt);
+	gme_vector3d maxPt = localAxis.GlobalToLocal(max_pnt); //包围盒-全局转局部
+
+	gme_vector3d cellSize(xyz_gap.x, xyz_gap.y, xyz_gap.z);
+	//gmeField field1(samples.first.FldName, gmeFieldValue::gmeType::Type_Real64);
+
+	/*gmeField field1;
+	field1.SetInvalidValue(to_string(invalid));
+	gmeFields schema;
+	schema.Append(field1);*/
+
+	gmeField field1(modelName, gmeFieldValue::gmeType::Type_Real64);
+	field1.SetInvalidValue(to_string(invalid));
+	gmeFields schema;
+	schema.Append(field1);
+
+	gmeGridModel* pOctFieldGeom = new gmeGridModel(modelName, localAxis, maxPt, cellSize, schema);
+
+	const gme_vector3i& dim = pOctFieldGeom->GetDimension();
+
+	long xSpan = dim.x;
+	long ySpan = dim.y;
+	long zSpan = dim.z;
+
+	if (pAttValues->size() == xSpan * ySpan * zSpan)
+	{
+		pOctFieldGeom->SetCellsValue(field1.GetName(), {0,0,0}, xSpan, ySpan, zSpan, &(*pAttValues)[0]);
+
+		OgAppResLoadingIterator::getSingleton().editStatusProg(80);
+
+		vector<double> breakVals; //可用新值替换
+		AttBreaksSet(*pAttValues, breakVals);//计算间断点815
+		//增加体积占比显示
+		//先排序；
+		vector<double> *pAtArr;
+		pAtArr = pAttValues;
+		//int cnt = pAtArr->size();
+		//for (int i = 0; i < cnt; ++i)
+		//{
+		//	for (int j = 0; j < cnt - 1 - i; ++j)
+		//	{
+		//		if ((*pAtArr)[j] > (*pAtArr)[j + 1])  // 从小排到大
+		//		{
+		//			double temp = (*pAtArr)[j];
+		//			(*pAtArr)[j] = (*pAtArr)[j + 1];
+		//			(*pAtArr)[j + 1] = temp;
+		//		}
+		//	}
+		//}
+		//*pAtArr = QuickSort(*pAtArr, 0, pAtArr->size() - 1);
+		//*pAtArr = QuickSort(*pAttValues, 0, pAttValues->size() - 1);
+		sort_quick_non_recursive(*pAtArr, 0, pAtArr->size() - 1);
+		int f0 = 0;  //记录无效值数目
+		int f1 = 0;  //有效
+		vector<int> f1Index; //下标
+		vector<int> f1Len;   //区间内的有效值个数
+		int pAtsize = pAtArr->size();//记录长度
+		//for (int i = 0; i < pAtArr->size();i++) {
+		//	if ((*pAtArr)[i] != invalid) {
+		//		for (int j = 1; j < breakVals.size()-1;j++) {
+		//			while ((breakVals[j-1]<= (*pAtArr)[i]) && ((*pAtArr)[i] <= breakVals[j])) {
+		//				       f1++;
+		//			}
+		//			f1num.push_back(f1);//每个部分的个数
+		//			//f1++;
+		//		}
+		//		//f1++;
+		//	}
+		//	if ((*pAtArr)[i] == invalid) {
+		//		f0++;
+		//	   }//无效值数目
+		//}//得到每部分格子数
+		//有序数组
+		//查找对应的值下标，找到区间个数
+		for (int i = 0; i < pAtsize;i++) 
+		{
+			    
+			if ((*pAtArr)[i] != invalid) 
+			{
+				for (int j = 0; j < breakVals.size(); j++) 
+				{
+					if ((*pAtArr)[i] == breakVals[j]) {
+						int index = i;
+						f1Index.push_back(index);
+					}
+				}
+			}
+			if ((*pAtArr)[i] == invalid) 
+			{
+				f0++;
+			}
+		}
+		//f1 = pAtsize - f0;
+		//统计数量//取下
+		for (int i = 0 ; i < f1Index.size()-1;i++) {
+			int dursize = f1Index[i+1] - f1Index[i];
+			f1Len.push_back(dursize);//
+		}
+
+		for (int z = 0; z < f1Len.size(); z++) {
+			float f1value = f1Len[z];
+			float floatf1 = pAtsize - f0;//f1
+			float  per = (f1value / floatf1)*100;
+			////string text = per.ToString("F2");//控制位数
+			PerVolume.push_back(per);//占比
+		}
+		
+
+		f1Len.clear();
+		setOctFieldColor(pOctFieldGeom, breakVals);//设色
+
+		gmeGridModel* pAttrModel = buildOctFieldModel(pOctFieldGeom);
+
+		gmeGridModel::FieldColorMap fieldColor;
+		fieldColor = pOctFieldGeom->GetColorMap();
+
+		vector<gme_color4> colors;	//图例颜色
+		//i=0为无效值颜色，i=size-1为无意义的补充颜色
+		for (size_t i = 1; i < fieldColor.vFieldColors.size() - 1; i++)
+		{
+			colors.push_back(fieldColor.vFieldColors[i].second);
+		}
+
+ 		setOctFieldLegend(pAttrModel, breakVals, colors);//设置图例
+
+		visualEvaluationModel(pAttrModel, modelName);//显示评价模型
+	}
+
+}
+
+
+void CAGeomodel::Buildwigmodel() {
+	if (fldsWeight.size()!= stdTable->rowCount()){
+		QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("请设置权值！"));
+		return;
+	}
+	string modelName = ui.lineEdit_MdlName->text().toLocal8Bit().data();//ui
+	reatfun();
+	/*vector<double>* pAttValues;
+	pAttValues = &CalWeight(pAttVaArr, fldsWeight, modelName);*/
+	//ChangeNewValue(pAttVaArr); //归一化
+	//normalpAttVaArr
+	//buildNewOct(&CalWeight(pAttVaArr, fldsWeight, modelName), modelName);
+	buildNewOct(&CalWeight(pAttVaArr, fldsWeight, modelName), modelName);
+	pAttVaArr.clear();
+	fldsWeight.clear();
+	normalpAttVaArr.clear();
+}
+
+
+//除去无效值/若为0则均为无效值
+std::vector<double> CAGeomodel::DeterInvalid(vector<double> CalWeightResult) {
+	vector<double> NewCalWeightResult;
+	double newtemp;
+	for (int i = 0; i < CalWeightResult.size();i++) {
+		newtemp = CalWeightResult[i];
+		//再次归一化 Norsig(pAttVaArr[i])
+
+		if (newtemp == 0) {
+			NewCalWeightResult.push_back(invalid);
+		}
+		else {
+			NewCalWeightResult.push_back(newtemp);
+		}
+
+	}
+	return NewCalWeightResult;
+}
+
+
+    
+
+
+void CAGeomodel::NewVisualModel(){
+	std::string name = ui.modelName->text().toLocal8Bit().data();
+	visualEvaluationModel(m_OctFieldModel, name);
+}
+
+//读取vtk文件并显示
+bool CAGeomodel::ReadVtkShow(const std::string& strResult, std::string& strError)
+{
+	OgAppResLoadingIterator::getSingleton().editStatusCmd("显示评价模型");
+
+	vtkDataStr dataPara;
+	VTKOperrator::ReadVtkData(dataPara, strResult);
+
+	OgAppResLoadingIterator::getSingleton().editStatusProg(20);
+
+	//处理数据，获取间断点breakVal
+	vector<double> vecBreakVal;
+	for (int i = 0; i < dataPara.vecAllValue.size(); i++)
+	{
+		double dVal = dataPara.vecAllValue[i];
+		if (dVal != invalid)
+		{
+			std::vector<double>::iterator iter = std::find(vecBreakVal.begin(), vecBreakVal.end(), dVal);
+			if (iter == vecBreakVal.end())  //不存在
+			{
+				vecBreakVal.emplace_back(dVal);
+			}
+		}
+	}
+
+	//间断点对应颜色 1绿，2黄，3橙，4红
+	std::vector<gme_color4> vecBreakCol;
+	vecBreakCol.emplace_back(0, 255, 0, 255);
+	vecBreakCol.emplace_back(255, 255, 0, 255);
+	vecBreakCol.emplace_back(255, 171, 0, 255);
+	vecBreakCol.emplace_back(255, 0, 0, 255);
+
+	BreakAddColorStr breakPara;
+	breakPara.dInvalidValue = invalid;
+	breakPara.vecBreakVals = vecBreakVal;
+	breakPara.vecColors = vecBreakCol;
+
+	gmeGridModel* pMdl = VTKOperrator::BuildVtkGmeModel(dataPara, breakPara, strResult, strError);
+	if (pMdl == NULL)
+	{
+		return false;
+	}
+
+	OgAppResLoadingIterator::getSingleton().editStatusProg(80);
+
+	//添加图例
+	int iLegendNum = vecBreakVal.size();
+	if (iLegendNum < 5)
+	{
+		AddLegendToModel(pMdl, vecBreakVal.size());
+	}
+	else
+	{
+		if (iLegendNum == vecBreakCol.size())
+		{
+			AttachStripLegend(pMdl, vecBreakVal, vecBreakCol, "适宜性评价");
+		}
+		else
+		{
+			AttachBlockLegend(pMdl, vecBreakVal, vecBreakCol, "适宜性评价");
+		}
+	}
+
+	Smart3dMap::Container * pContaienr = S3dm3dRenderRegister::cvtGmeGridModel23dLayer(pMdl);
+	if (pContaienr = nullptr)
+	{
+		strError = "建模失败";
+		return false;
+	}
+
+	OgAppResLoadingIterator::getSingleton().editStatusProg(100);
+
+	pContaienr->setVisible(true);
+
+	return true;
+}
+
+//评价模型添加图例
+void CAGeomodel::AddLegendToModel(gmeGridModel* pGmeModel, int iLevelNum)
+{
+	//添加图例  1适宜(绿)、2较适宜(黄)、3一般适宜(橙)、4较不适宜(红)替代属性值
+	vector<std::string> vecLegendName;
+	vector<gme_color4> vecLegendColor;
+
+	if (iLevelNum == 1)
+	{
+		vecLegendName.clear();
+		vecLegendColor.clear();
+
+		vecLegendName.emplace_back(LEGEND_NAME_SUITABLE);
+		vecLegendColor.emplace_back(0, 255, 0, 255); //绿
+
+		AttachBlockLegend2(pGmeModel, vecLegendName, vecLegendColor, "适宜性评价");
+	}
+	else if (iLevelNum == 2)
+	{
+		vecLegendName.clear();
+		vecLegendColor.clear();
+
+		vecLegendName.emplace_back(LEGEND_COLOR_RELATIVESUITABLE);
+		vecLegendName.emplace_back(LEGEND_NAME_SUITABLE);
+		vecLegendColor.emplace_back(255, 255, 0, 255); //黄
+		vecLegendColor.emplace_back(0, 255, 0, 255);   //绿
+
+		AttachBlockLegend2(pGmeModel, vecLegendName, vecLegendColor, "适宜性评价");
+	}
+	else if (iLevelNum == 3)
+	{
+		vecLegendName.clear();
+		vecLegendColor.clear();
+
+		vecLegendName.emplace_back(LEGEND_COLOR_GENERALSUITABLE);
+		vecLegendName.emplace_back(LEGEND_COLOR_RELATIVESUITABLE);
+		vecLegendName.emplace_back(LEGEND_NAME_SUITABLE);
+		vecLegendColor.emplace_back(255, 165, 0, 255); //橙
+		vecLegendColor.emplace_back(255, 255, 0, 255); //黄
+		vecLegendColor.emplace_back(0, 255, 0, 255);   //绿
+
+		AttachBlockLegend2(pGmeModel, vecLegendName, vecLegendColor, "适宜性评价");
+	}
+	else if (iLevelNum == 4)
+	{
+		vecLegendName.clear();
+		vecLegendColor.clear();
+
+		vecLegendName.emplace_back(LEGEND_COLOR_LESSSUITABLE);
+		vecLegendName.emplace_back(LEGEND_COLOR_GENERALSUITABLE);
+		vecLegendName.emplace_back(LEGEND_COLOR_RELATIVESUITABLE);
+		vecLegendName.emplace_back(LEGEND_NAME_SUITABLE);
+
+		vecLegendColor.emplace_back(255, 0, 0, 255);   //红
+		vecLegendColor.emplace_back(255, 165, 0, 255); //橙
+		vecLegendColor.emplace_back(255, 255, 0, 255); //黄
+		vecLegendColor.emplace_back(0, 255, 0, 255);   //绿
+
+		AttachBlockLegend2(pGmeModel, vecLegendName, vecLegendColor, "适宜性评价");
+	}
+}
+
+//块状图例
+void CAGeomodel::AttachBlockLegend2(gmeGridModel *pOctFieldMdl, vector<std::string> vBreaksName, vector<gme_color4> vCols, string strLegendName)
+{
+	if (vBreaksName.empty() || vCols.empty() || (vBreaksName.size() != vCols.size()))
+	{
+		return;
+	}
+
+	vector<string> stratCode;
+	vector<string> stratName;
+	vector<string> materialName;
+	GME_LEGEND_TYPE legendType = GME_LT_COLOR;
+
+	for (size_t i = 0; i < vBreaksName.size(); i++)
+	{
+		long lStratClr = vCols[i].r + vCols[i].g * 256 + vCols[i].b * 256 * 256;
+
+		string attCode = "";
+		string attName = vBreaksName[i];
+		string clrName = _getClrMatName(lStratClr);
+
+		stratCode.push_back(attCode);
+		stratName.push_back(attName);
+		materialName.push_back(clrName);
+	}
+
+	reverseVec(stratCode);
+	reverseVec(stratName);
+	reverseVec(materialName);
+
+	pOctFieldMdl->GetLegend().SetName(strLegendName);
+
+	S3dAppRender3D::cvtStandardCode2GmeLegend(&pOctFieldMdl->GetLegend(), legendType, stratCode, stratName, materialName);
+}
+
+
+//修改对应空间值
+//归一化
+std::vector<vector<double>> CAGeomodel::ChangeNewValue(std::vector<vector<double>> pAttVaArr){
+	normalpAttVaArr.clear();
+	/*std::vector<double> tempArr;
+	double tempnum=0;*/
+	for (int i = 0; i < pAttVaArr.size(); i++) {
+		normalpAttVaArr.push_back(Norsig(pAttVaArr[i]));
+   }
+	return normalpAttVaArr;
+}
+
+//一维数组
+std::vector<double> CAGeomodel::Norsig(std::vector<double> sigArr) {
+	double TempSig = 0;
+	double SigSum = 0;//总和
+	double FCSum = 0;//方差和
+	double FCresult = 0;
+	double Bzc = 0;
+	double Arravg = 0;
+	int index1 = 0;
+	int index2 = 0;
+	vector<double> SigArr;
+	SigArr.clear();
+
+	for (int i = 0; i < sigArr.size(); i++) {
+		if (sigArr[i]==invalid) {
+			sigArr[i] = 0;//无效值暂设为0，简化计算
+			index1++;
+	   }
+		if (sigArr[i]!=0) {
+			SigSum += sigArr[i];//有效值的和
+			Arravg = SigSum / (sigArr.size() - index1); //有效值的平均数
+			FCSum += pow(sigArr[i] - Arravg, 2);
+			FCresult = FCSum / (sigArr.size() - index1);//有效值方差
+			Bzc = sqrt(FCresult);//标准差
+		}
+	}
+	for (int j = 0; j < sigArr.size(); j++) {
+		//if (sigArr[j] == invalid) {
+		//	sigArr[j] = 0;//无效值暂设为0，简化计算
+		//}
+		if (sigArr[j]!= 0) {
+			TempSig = (sigArr[j]- Arravg)/ Bzc;
+			SigArr.push_back(TempSig);
+		}
+		if (sigArr[j] == 0) {
+			SigArr.push_back(sigArr[j]);
+		}
+	}
+	     return  SigArr;
+}
+
+//均值
+double CAGeomodel::average(double *x, int len)
+{
+	double sum = 0;
+	for (int i = 0; i < len; i++) // 求和
+		sum += x[i];
+	return  sum / len; // 得到平均值
+}
+
+ double CAGeomodel::variance(double *x, int len)
+{
+	double sum = 0;
+	double avg = average(x, len);
+	for (int i = 0; i < len; i++) // 求和
+		sum += pow(x[i] - avg, 2);
+	return sum / len; // 得到方差
+}
+
+double CAGeomodel::standardDev(double *x, int len)
+{
+	double var = variance(x, len);
+	return sqrt(var); // 得到标准差
+}
+
+//未用
+//递归快排，数据量大时不适用，易堆栈溢出错
+std::vector<double> CAGeomodel::QuickSort(vector<double> array, int low, int high) {
+	//if (low >= high) {	//若待排序序列只有一个元素，返回空 
+	//	 ;
+	//}
+	int i = low;	//i作为指针从左向右扫描 
+	int j = high;	//j作为指针从右向左扫描
+	int key = array[low];//第一个数作为基准数 
+	while (i < j) {
+		while (array[j] >= key && i < j) {	//从右边找小于基准数的元素 （此处由于j值可能会变，所以仍需判断i是否小于j） 
+			j--;	//找不到则j减一 
+		}
+		array[i] = array[j];	//找到则赋值 
+		while (array[i] <= key && i < j) {	//从左边找大于基准数的元素 
+			i++;	//找不到则i加一 
+		}
+		array[j] = array[i];	//找到则赋值 
+	}
+	array[i] = key;	//当i和j相遇，将基准元素赋值到指针i处 
+	QuickSort(array, low, i - 1);	//i左边的序列继续递归调用快排 
+	QuickSort(array, i + 1, high);	//i右边的序列继续递归调用快排 
+	return  array;
+}
+
+//快排
+int CAGeomodel::partition(std::vector<double> &data, int left, int right)
+{
+	// 找到中轴数的正确位置,同时将序列划分为两部分.
+	// 中轴数有很多种取法,我们这里采用《算法导论》里的选取方法,即取序列最后一个元素.
+	double key = data.at(right);
+	// 此处设置两个索引i和j,区间[left,i]为小于中轴数的序列,
+	// 区间[j,right-1]为大于中轴数的序列.
+	int i = left - 1;
+	for (int j = left; j < right; j++)
+	{
+		if (data.at(j) <= key)
+		{
+			// 大于中轴数的元素让它继续待在[j,right-1]区间什么也不做;
+			// 小于中轴数的元素全部从[j,right-1]区间放到[left,i]区间去.
+			++i;
+			double temp = data.at(i);
+			data.at(i) = data.at(j);
+			data.at(j) = temp;
+		}
+	}
+	// 此时中轴数的正确位置应该在i+1,将其归位.
+	// 思考为什么是i+1而不是i.
+	double temp = data.at(i + 1);
+	data.at(i + 1) = data.at(right);
+	data.at(right) = temp;
+	// 返回中轴数的正确索引.
+	return i + 1;
+}
+
+void CAGeomodel::sort_quick_non_recursive(std::vector<double> &data, int left, int right)
+{
+	// 思想：
+	// 在元素序列上直接操作;
+	// 每次在无序序列中选取一个数,一般称之为中轴数,
+	// 将元素序列分成两个部分,使得一部分的元素全都小于等于另一部分的所有元素;
+	// 也就是说将序列分成小于等于中轴数和大于等于中轴数的两部分,使得中轴数变为有序;
+	// 再递归的对分成的两部分进行划分操作.
+
+	// 非递归利用栈来实现.
+	// 利用栈来存储子序列的起点后终点(其实递归也是通过调用系统堆栈来保护调用现场的).
+	std::stack<double> s;
+	if (left < right)
+	{
+		// 找到中轴数的索引.
+		int index = partition(data, left, right);
+		// 如果中轴数索引两个分区存在,则将起点和终点入栈.
+		if (index - 1 > left)
+		{
+			// 下面的入栈顺序要和此处一致.
+			s.push(left);
+			s.push(index - 1);
+		}
+		if (index + 1 < right)
+		{
+			s.push(index + 1);
+			s.push(right);
+		}
+		// 从栈里面取出序列并找到该序列中轴数的正确索引.
+		while (!s.empty())
+		{
+			// 注意顺序.
+			int r = s.top();
+			s.pop();
+			int l = s.top();
+			s.pop();
+			index = partition(data, l, r);
+			// 将新的序列区间入栈.
+			if (index - 1 > l)
+			{
+				s.push(l);
+				s.push(index - 1);
+			}
+			if (index + 1 < r)
+			{
+				s.push(index + 1);
+				s.push(r);
+			}
+		}
+	}
+}
+
+
+
+#pragma endregion
+
